@@ -1,0 +1,10 @@
+{
+  "name": "metadatasummary",
+  "version": "1.0.0",
+  "description": "",
+  "main": "summarise.ts",
+  "private": true,
+  "dependencies": {
+    "@types/bun": "^1.2.20"
+  }
+}
