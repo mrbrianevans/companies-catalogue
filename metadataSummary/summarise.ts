@@ -1,6 +1,7 @@
 // metadataSummary.ts
 import {SQL} from "bun";
 import {writeFile, lstat} from "fs/promises";
+import { ProductSummary, MetadataSummary } from "./types";
 
 interface FileRow {
     path: string;
@@ -10,15 +11,6 @@ interface FileRow {
     date: string;          // e.g. "2023-01-03"
 }
 
-interface ProductSummary {
-    product: string;
-    latest_files: string[];
-    latest_date: string; // ISO date (YYYY-MM-DD) for the latest files
-    latest_last_modified: string; // ISO timestamp: most recent last_modified among latest files
-    avg_interval_days: number | null;
-    avg_size_last5: number | null;
-    last5_dates: string[];
-}
 
 async function fetchFiles(dbPath: string): Promise<FileRow[]> {
     console.log(`Fetching files from ${dbPath}`);
@@ -143,7 +135,7 @@ async function writeSummary(dbPath: string, outputPath: string) {
         .map(r => r.size_bytes)
         .reduce((a, b) => a + b, 0);
 
-    const output = {
+    const output: MetadataSummary = {
         generated_at,
         most_recent_last_modified,
         total_avg_size_last5,
