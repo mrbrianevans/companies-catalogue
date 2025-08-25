@@ -1,38 +1,80 @@
 import paramiko
 import json
 import os
+import sqlite3
 from datetime import datetime
 import time
 
-def crawl_sftp(host, port, username, key_path, base_path='/'):
+def crawl_sftp(host, port, username, key_path, base_path='/', db_path='sftp_catalogue.db', jsonl_path='sftp_file_metadata_catalogue.jsonl'):
+    # Set up SFTP
     transport = paramiko.Transport((host, port))
     pkey = paramiko.RSAKey.from_private_key_file(key_path)
     transport.connect(username=username, pkey=pkey)
     sftp = paramiko.SFTPClient.from_transport(transport)
 
-    files_catalogue = []
+    # Set up SQLite database (persist on disk)
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT UNIQUE,
+            size_bytes INTEGER,
+            last_modified TEXT
+        )
+    """)
+    conn.commit()
+
+    # Open JSONL file for appending
+    jsonl_file = open(jsonl_path, "a", encoding="utf-8")
+
+    def save_file_metadata(full_path, size, mtime):
+        record = {
+            'path': full_path,
+            'size_bytes': size,
+            'last_modified': datetime.fromtimestamp(mtime).isoformat()
+        }
+
+        # Insert into SQLite (ignore if already exists)
+        cursor.execute("""
+            INSERT OR IGNORE INTO files (path, size_bytes, last_modified)
+            VALUES (?, ?, ?)
+        """, (record['path'], record['size_bytes'], record['last_modified']))
+        conn.commit()
+
+        # Append to JSONL
+        jsonl_file.write(json.dumps(record) + "\n")
+        jsonl_file.flush()  # ensures resilience in case of crash
 
     def recurse(dir_path):
         for entry in sftp.listdir_attr(dir_path):
+            if entry.filename == 'bulkimage':
+                continue  # skip huge directory
             full_path = os.path.join(dir_path, entry.filename)
             if entry.longname.startswith('d'):  # Directory
                 recurse(full_path)
             else:  # File
-                print('Found path', full_path)
-                files_catalogue.append({
-                    'path': full_path,
-                    'size_bytes': entry.st_size,
-                    'last_modified': datetime.fromtimestamp(entry.st_mtime).isoformat()
-                })
-        time.sleep(2.5)
+                print("Found path", full_path, entry.st_size)
+                save_file_metadata(full_path, entry.st_size, entry.st_mtime)
+        time.sleep(1)
 
     recurse(base_path)
+
+    # Clean up
+    jsonl_file.close()
     sftp.close()
     transport.close()
-    return files_catalogue
+    conn.close()
+    print(f"Saved SQLite DB at {db_path} and JSONL at {jsonl_path}")
 
-username = os.getenv('SFTP_USERNAME')
-catalogue = crawl_sftp('bulk-live.companieshouse.gov.uk', 22, username, '/root/.ssh/ch_key', '/free')
-with open('/output/sftp_file_metadata_catalogue.json', 'w') as f:
-    json.dump(catalogue, f, indent=4)
-print('Saved output to /output/sftp_file_metadata_catalogue.json')
+if __name__ == "__main__":
+    username = os.getenv('SFTP_USERNAME')
+    crawl_sftp(
+        host='bulk-live.companieshouse.gov.uk',
+        port=22,
+        username=username,
+        key_path='/root/.ssh/ch_key',
+        base_path='/free',
+        db_path='/output/sftp_catalogue.db',
+        jsonl_path='/output/sftp_file_metadata_catalogue.jsonl'
+    )
