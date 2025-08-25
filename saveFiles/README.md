@@ -13,5 +13,5 @@ docker build -t cc-save-files .
 ```
 
 ```bash
-docker run -v companies-catalogue/output:/output --env-file .env cc-save-files
+docker run -v companies-catalogue/output:/output -v ~/.ssh/ch_key:/root/ch_key:ro --env-file .env cc-save-files
 ```

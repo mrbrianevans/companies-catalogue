@@ -266,6 +266,17 @@ func main() {
 		log.Fatalf("s3 client error: %v", err)
 	}
 
+	// Upload metadata JSON to the root of the bucket before downloading files
+	metaKey := filepath.Base(metadataPath)
+	log.Printf("Access key %s", s3Access)
+	log.Printf("Uploading metadata to bucket=%s key=%s from %s", s3Bucket, metaKey, metadataPath)
+	err = retry(3, 2*time.Second, func() error {
+		return uploadFile(ctx, s3c, s3Bucket, metaKey, metadataPath)
+	})
+	if err != nil {
+		log.Fatalf("ERROR uploading metadata %s: %v", metaKey, err)
+	}
+
 	// Connect SFTP once
 	sconn, err := connectSFTP(sftpHost, sftpPort, sftpUser, sftpKeyPath, sftpKeyPass)
 	if err != nil {
