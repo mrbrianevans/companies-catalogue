@@ -8,7 +8,7 @@
         Tag,
         InlineLoading,
         StructuredList,
-        StructuredListBody, StructuredListRow, StructuredListCell, Button
+        StructuredListBody, StructuredListRow, StructuredListCell, Button, ButtonSet
     } from 'carbon-components-svelte';
   import type { ProductSummary } from '../lib/types';
   import { getProduct } from '../lib/stores/products';
@@ -31,6 +31,35 @@
   }
   
   const productDetailsPromise = productId?getProduct(productId):undefined;
+
+  // more docs stored at /custom/free/productId/*.{pdf,md,html}
+    async function listFormats(docPath: string) {
+        const formats = ['.pdf', '.md', '.html'];
+        const docs = []
+        for(const format of formats) {
+            const attemptPath = `/custom${docPath.replace(/\.[^.]+$/, format)}`
+            const url = new URL(attemptPath, import.meta.env.VITE_S3_URL);
+            const res = await fetch(url, {method:'GET'});
+            if (res.ok) {
+                docs.push(attemptPath);
+            }
+        }
+        return docs
+    }
+    async function loadOtherFormats(docs:string[]) {
+        const otherFormats = []
+        for(const doc of docs) {
+            const docFormats = await listFormats(doc)
+            otherFormats.push(...docFormats)
+        }
+        return otherFormats
+    }
+    let allDocs = summary.docs
+    $: loadOtherFormats(summary.docs).then(docs=>allDocs=[...summary.docs,...docs])
+    $: console.log(allDocs)
+    function ext(filename: string){
+        return filename.split('.').at(-1)??'';
+    }
 </script>
 
 <Grid fullWidth padding>
@@ -69,7 +98,7 @@
   </Row>
 
     <Row>
-        <Column sm={4} md={6} lg={8}>
+        <Column sm={4} md={8} lg={16}>
             <Tile>
                 <h3 style="margin-top: 0;">Docs</h3>
                 {#if summary.docs.length > 0}
@@ -77,8 +106,14 @@
                         <StructuredListBody>
                         {#each summary.docs as doc}
                             <StructuredListRow>
-                                <StructuredListCell>{doc}</StructuredListCell>
-                                <StructuredListCell><Button href={new URL(doc, import.meta.env.VITE_S3_URL).href}>Download</Button></StructuredListCell>
+                                <StructuredListCell>{doc.replace(/\.[^.]+$/, '')}</StructuredListCell>
+                                <StructuredListCell>
+                                    <ButtonSet >
+                                    {#each allDocs.filter(docFormat => docFormat.includes(doc.replace(/\.[^.]+$/, '.'+ext(docFormat)))) as docFormat}
+                                        <Button href={new URL(docFormat, import.meta.env.VITE_S3_URL).href} target="_blank">{ext(docFormat).toUpperCase()}</Button>
+                                    {/each}
+                                    </ButtonSet>
+                                </StructuredListCell>
                             </StructuredListRow>
                             {/each}
                         </StructuredListBody>

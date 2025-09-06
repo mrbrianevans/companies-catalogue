@@ -5,9 +5,8 @@ export const loading = writable(true);
 export const error = writable<string | null>(null);
 export const data = writable<MetadataSummary | null>(null);
 
-const SUMMARY_URL = import.meta.env.DEV
-  ? '/sftp_file_metadata_summary.json'
-  : new URL('/sftp_file_metadata_summary.json', import.meta.env.VITE_S3_URL);
+const SUMMARY_URL =
+   new URL('/sftp_file_metadata_summary.json', import.meta.env.VITE_S3_URL);
 
 export async function fetchSummary() {
   loading.set(true);

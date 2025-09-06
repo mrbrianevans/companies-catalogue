@@ -10,7 +10,7 @@ RUN go mod download && \
 # Runtime stage
 FROM alpine:latest
 
-RUN apk add --no-cache pandoc libreoffice
+RUN apk add --no-cache pandoc poppler-utils libreoffice
 
 WORKDIR /
 COPY --from=build /savefiles /savefiles

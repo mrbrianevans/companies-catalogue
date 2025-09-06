@@ -282,7 +282,27 @@ func retry(attempts int, sleep time.Duration, fn func() error) error {
 }
 
 func PandocConvert(inputPath, outputPath string, options []string) error {
-	if filepath.Ext(inputPath) == ".doc" {
+	ext := filepath.Ext(inputPath)
+	if (ext == ".doc" || ext == ".docx" || ext == ".txt") && filepath.Ext(outputPath) == ".pdf" {
+		// Use LibreOffice for .doc/.docx to .pdf
+		cmd := exec.Command("libreoffice", "--headless", "--convert-to", "pdf", inputPath, "--outdir", filepath.Dir(outputPath))
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("libreoffice conversion failed: %v, stderr: %s", err, stderr.String())
+		}
+		// LibreOffice outputs to outdir with same filename but .pdf extension
+		generatedPath := filepath.Join(filepath.Dir(outputPath), filepath.Base(inputPath[:len(inputPath)-len(ext)])+".pdf")
+		// Rename to desired outputPath if different
+		if generatedPath != outputPath {
+			if err := os.Rename(generatedPath, outputPath); err != nil {
+				return fmt.Errorf("failed to rename %s to %s: %v", generatedPath, outputPath, err)
+			}
+		}
+		return nil
+	}
+
+	if ext == ".doc" {
 		cmd := exec.Command("libreoffice", "--headless", "--convert-to", "docx", inputPath, "--outdir", filepath.Dir(inputPath))
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("libreoffice conversion failed: %v", err)
@@ -314,7 +334,7 @@ func processDoc(ctx context.Context, s3c *s3.Client, s3Bucket, inputPath, output
 		// 	the only formats supported by pandoc
 		return nil
 	}
-	outputPath := filepath.Join(filepath.Dir(inputPath), filepath.Base(inputPath[:len(inputPath)-len(filepath.Ext(inputPath))])+".html")
+	outputPath := filepath.Join(filepath.Dir(inputPath), filepath.Base(inputPath[:len(inputPath)-len(filepath.Ext(inputPath))])+".pdf")
 	options := []string{}
 	if err := PandocConvert(inputPath, outputPath, options); err != nil {
 		log.Fatalf("Conversion failed: %v", err)
