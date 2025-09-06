@@ -23,7 +23,7 @@
 
 <Tile>
   <div style="display:flex; align-items:baseline; justify-content:space-between; gap:0.5rem;">
-    <h3 style="margin: 0;">{displayName}</h3>
+    <h3 style="margin: 0;"><a href="/#/{product.product}" style="text-decoration: none; color: inherit;">{displayName}</a></h3>
     <Tag type="cool-gray">{product.product}</Tag>
   </div>
 
@@ -45,11 +45,18 @@
     <div>{new Date(product.latest_last_modified).toLocaleString()}</div>
   </div>
 
-  <Accordion style="margin-top: 0.75rem;">
+  <Accordion style="margin-top: 0.75rem;padding-right:0" >
     <AccordionItem title="Latest paths">
-      <CodeSnippet type="multi" feedback="Copied!" style="max-height: 12rem; overflow:auto;">
+      <CodeSnippet type="multi" feedback="Copied!">
 {product.latest_files.join('\n')}
       </CodeSnippet>
     </AccordionItem>
   </Accordion>
 </Tile>
+
+
+<style>
+    :global(.bx--accordion__content){
+        padding-right:0 !important;
+    }
+</style>

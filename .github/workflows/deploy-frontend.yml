@@ -34,6 +34,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build
+        env:
+          VITE_S3_URL: https://s3.companiescatalogue.co.uk/
         run: bun run build
 
       - name: Upload build artifact

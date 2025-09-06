@@ -7,7 +7,7 @@ export const data = writable<MetadataSummary | null>(null);
 
 const SUMMARY_URL = import.meta.env.DEV
   ? '/sftp_file_metadata_summary.json'
-  : 'https://pub-022c8bf97425454a9b539021ace956f8.r2.dev/sftp_file_metadata_summary.json';
+  : new URL('/sftp_file_metadata_summary.json', import.meta.env.VITE_S3_URL);
 
 export async function fetchSummary() {
   loading.set(true);
