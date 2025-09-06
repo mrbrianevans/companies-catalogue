@@ -1,7 +1,39 @@
 // metadataSummary.ts
 import {SQL} from "bun";
-import {writeFile, lstat} from "fs/promises";
-import { ProductSummary, MetadataSummary } from "./types";
+import {lstat, writeFile} from "fs/promises";
+import {MetadataSummary, ProductSummary} from "./types";
+
+const FILE_PATH_REGEX = /^\/free\/prod\d+\/\d{4}\/\d{2}\/\d{2}\/[^\/]+\.[^\/]+$/;
+
+interface DocRow {
+    path: string;
+    product: string|undefined;       // e.g. "prod195"
+}
+
+async function fetchDocs(dbPath: string): Promise<DocRow[]>{
+    console.log(`Fetching files from ${dbPath}`);
+    const stats = await lstat(dbPath)
+    console.log(stats.size.toLocaleString(), 'bytes DB file')
+
+    const db = new SQL(`sqlite://${dbPath}?mode=ro`);
+
+    // Extract product and date from the path using SQLite string ops
+    const rows = await db<FileRow[]>`
+        SELECT path
+        FROM files
+        WHERE path NOT LIKE '/free/prod%/____/__/__/%'
+        AND path NOT LIKE '%/.DS_Store'
+        ;
+    `;
+
+    return rows.map(row=>{
+
+        const parts = row.path.split("/");
+        const product = parts.length >= 4 ? parts[2] : undefined; // eg "prod195"
+        return {path: row.path, product}
+    })
+}
+
 
 interface FileRow {
     path: string;
@@ -10,7 +42,6 @@ interface FileRow {
     product: string;       // e.g. "prod195"
     date: string;          // e.g. "2023-01-03"
 }
-
 
 async function fetchFiles(dbPath: string): Promise<FileRow[]> {
     console.log(`Fetching files from ${dbPath}`);
@@ -24,12 +55,15 @@ async function fetchFiles(dbPath: string): Promise<FileRow[]> {
         SELECT path,
                size_bytes,
                last_modified
-        FROM files;
+        FROM files
+        WHERE path LIKE '/free/prod%/____/__/__/%'
     `;
 
     // Normalize to include a YYYY-MM-DD date field
-    return rows.map((row) => {
-        // path format: /free/prod195/2023/01/03/filename
+    return rows
+        .filter(row => FILE_PATH_REGEX.test(row.path))
+        .map((row) => {
+        // path format: /free/prod195/2023/01/03/filename.ext
         const parts = row.path.split("/");
         const product = parts[2]; // "prod195"
         const yyyy = parts[3];
@@ -43,7 +77,7 @@ async function fetchFiles(dbPath: string): Promise<FileRow[]> {
     });
 }
 
-function summarizeProduct(files: FileRow[]): ProductSummary {
+function summarizeProduct(files: FileRow[], docs: DocRow[]): ProductSummary {
     const product = files[0].product;
 
     // ---- Latest files ----
@@ -87,8 +121,7 @@ function summarizeProduct(files: FileRow[]): ProductSummary {
     const last5 = datesDesc.slice(0, 5);
 
     const avgSizes: number[] = last5.map((d) => {
-        const totalSize = groupedByDate[d].reduce((sum, f) => sum + f.size_bytes, 0);
-        return totalSize / groupedByDate[d].length;
+        return groupedByDate[d].reduce((sum, f) => sum + f.size_bytes, 0)
     });
 
     const avgSizeLast5 = avgSizes.length > 0 ? avgSizes.reduce((a, b) => a + b, 0) / avgSizes.length : null;
@@ -101,11 +134,13 @@ function summarizeProduct(files: FileRow[]): ProductSummary {
         avg_interval_days: avgIntervalDays,
         avg_size_last5: avgSizeLast5,
         last5_dates: last5,
+        docs: docs.map(doc=>doc.path)
     };
 }
 
 async function writeSummary(dbPath: string, outputPath: string) {
     const rows = await fetchFiles(dbPath);
+    const docs = await fetchDocs(dbPath)
 
     // Group rows by product
     const byProduct: Record<string, FileRow[]> = {};
@@ -114,7 +149,7 @@ async function writeSummary(dbPath: string, outputPath: string) {
         byProduct[r.product].push(r);
     }
 
-    const summary: ProductSummary[] = Object.values(byProduct).map(summarizeProduct);
+    const summary: ProductSummary[] = Object.values(byProduct).map(files=>summarizeProduct(files, docs.filter(doc=>doc.product === files[0].product)));
 
     // Top-level metadata and totals
     const generated_at = new Date().toISOString();
@@ -141,6 +176,7 @@ async function writeSummary(dbPath: string, outputPath: string) {
         total_avg_size_last5,
         total_size_bytes,
         products: summary,
+        docs: docs.filter(doc=>!doc.product).map(doc=>doc.path)
     };
     await writeFile(outputPath, JSON.stringify(output, null, 2), "utf-8");
     console.log(`Metadata summary written to ${outputPath}`);

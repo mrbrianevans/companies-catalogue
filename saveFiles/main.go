@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -34,6 +36,7 @@ type ProductSummary struct {
 	AvgIntervalDays    *float64 `json:"avg_interval_days"`
 	AvgSizeLast5       *float64 `json:"avg_size_last5"`
 	Last5Dates         []string `json:"last5_dates"`
+	Docs               []string `json:"docs"`
 }
 
 type MetadataSummary struct {
@@ -42,6 +45,7 @@ type MetadataSummary struct {
 	TotalAvgSizeLast5      float64          `json:"total_avg_size_last5"`
 	TotalSizeBytes         int64            `json:"total_size_bytes"`
 	Products               []ProductSummary `json:"products"`
+	Docs                   []string         `json:"docs"`
 }
 
 func getenv(key, def string) string {
@@ -183,6 +187,12 @@ func uploadFile(ctx context.Context, s3c *s3.Client, bucket, key, filepath strin
 	defer f.Close()
 	uploader := manager.NewUploader(s3c, func(u *manager.Uploader) {
 		u.PartSize = 64 * 1024 * 1024 // 64MB parts for large files
+		u.Concurrency = 3
+		u.LeavePartsOnError = false // Clean up parts on failure
+		u.ClientOptions = append(u.ClientOptions, func(o *s3.Options) {
+			o.RetryMaxAttempts = 5
+			o.RetryMode = aws.RetryModeAdaptive
+		})
 	})
 	contentType := mimeTypeForFile(key)
 	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
@@ -190,7 +200,7 @@ func uploadFile(ctx context.Context, s3c *s3.Client, bucket, key, filepath strin
 		Key:         aws.String(key),
 		Body:        f,
 		ContentType: aws.String(contentType),
-		ACL:         types.ObjectCannedACLPrivate,
+		ACL:         types.ObjectCannedACLPublicRead,
 	})
 	return err
 }
@@ -202,9 +212,55 @@ func mimeTypeForFile(name string) string {
 		return "application/json"
 	case strings.HasSuffix(lower, ".txt") || strings.HasSuffix(lower, ".dat"):
 		return "text/plain"
+	case strings.HasSuffix(lower, ".doc"):
+		return "application/msword"
+	case strings.HasSuffix(lower, ".docx"):
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case strings.HasSuffix(lower, ".pdf"):
+		return "application/pdf"
+	case strings.HasSuffix(lower, ".md"):
+		return "text/markdown"
+	case strings.HasSuffix(lower, ".csv"):
+		return "text/csv"
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// processAndUpload handles downloading remote SFTP files to local OUTPUT_DIR and uploading to S3.
+// It returns a slice of successfully saved local file paths (relative to outputDir or absolute local paths).
+func processAndUpload(ctx context.Context, s3c *s3.Client, bucket string, sftpc *sftp.Client, outputDir string, remotes []string) []string {
+	saved := make([]string, 0, len(remotes))
+	for _, r := range remotes {
+		remote := r
+		if remote == "" || remote == "/" {
+			continue
+		}
+		if !strings.HasPrefix(remote, "/") {
+			remote = "/" + remote
+		}
+		localPath := filepath.Join(outputDir, filepath.FromSlash(strings.TrimPrefix(remote, "/")))
+		log.Printf("Downloading %s -> %s", remote, localPath)
+		err := retry(3, 2*time.Second, func() error {
+			return copyFromSFTPToLocal(sftpc, remote, localPath)
+		})
+		if err != nil {
+			log.Printf("ERROR downloading %s: %v", remote, err)
+			continue
+		}
+		s3key := strings.TrimPrefix(filepath.ToSlash(remote), "/")
+		log.Printf("Uploading to bucket=%s key=%s from %s", bucket, s3key, localPath)
+		err = retry(3, 2*time.Second, func() error {
+			return uploadFile(ctx, s3c, bucket, s3key, localPath)
+		})
+		if err != nil {
+			log.Printf("ERROR uploading %s: %v", s3key, err)
+			continue
+		}
+		log.Printf("Done %s", s3key)
+		saved = append(saved, localPath)
+	}
+	return saved
 }
 
 func retry(attempts int, sleep time.Duration, fn func() error) error {
@@ -225,6 +281,52 @@ func retry(attempts int, sleep time.Duration, fn func() error) error {
 	return err
 }
 
+func PandocConvert(inputPath, outputPath string, options []string) error {
+	if filepath.Ext(inputPath) == ".doc" {
+		cmd := exec.Command("libreoffice", "--headless", "--convert-to", "docx", inputPath, "--outdir", filepath.Dir(inputPath))
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("libreoffice conversion failed: %v", err)
+		}
+		inputPath = strings.ReplaceAll(inputPath, ".doc", ".docx")
+	}
+
+	args := append([]string{"-s", inputPath, "-o", outputPath}, options...)
+	if filepath.Ext(outputPath) == ".pdf" {
+		args = append(args, "--pdf-engine=pdflatex")
+	} else if filepath.Ext(outputPath) == ".md" {
+		args = append(args, []string{"--wrap=none", "--markdown-headings=atx", "--to=markdown"}...)
+	}
+	cmd := exec.Command("/usr/bin/pandoc", args...)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("pandoc conversion failed: %v, stderr: %s", err, stderr.String())
+	}
+
+	return nil
+}
+
+func processDoc(ctx context.Context, s3c *s3.Client, s3Bucket, inputPath, outputDir string) error {
+	ext := filepath.Ext(inputPath)
+	if ext != ".doc" && ext != ".docx" && ext != ".txt" {
+		// 	the only formats supported by pandoc
+		return nil
+	}
+	outputPath := filepath.Join(filepath.Dir(inputPath), filepath.Base(inputPath[:len(inputPath)-len(filepath.Ext(inputPath))])+".html")
+	options := []string{}
+	if err := PandocConvert(inputPath, outputPath, options); err != nil {
+		log.Fatalf("Conversion failed: %v", err)
+	}
+	log.Printf("Converted %s to %s", inputPath, outputPath)
+	s3key := "custom" + strings.TrimPrefix(outputPath, outputDir)
+	err := retry(3, 2*time.Second, func() error {
+		return uploadFile(ctx, s3c, s3Bucket, s3key, outputPath)
+	})
+	return err
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	// Env
@@ -240,7 +342,7 @@ func main() {
 	sftpKeyPass := getenv("SFTP_KEY_PASSPHRASE", "")
 
 	s3Endpoint := getenv("S3_ENDPOINT", "") // e.g., https://<accountid>.r2.cloudflarestorage.com
-	s3Region := getenv("S3_REGION", "auto")   // R2 uses "auto"
+	s3Region := getenv("S3_REGION", "auto") // R2 uses "auto"
 	s3Access := mustGetenv("S3_ACCESS_KEY_ID")
 	s3Secret := mustGetenv("S3_SECRET_ACCESS_KEY")
 	s3Bucket := mustGetenv("S3_BUCKET")
@@ -284,39 +386,28 @@ func main() {
 	}
 	defer sconn.Close()
 
+	// First, process top-level docs from metadata summary
+	savedTop := processAndUpload(ctx, s3c, s3Bucket, sconn.client, outputDir, summary.Docs)
+	log.Printf("Saved top-level docs: %v", savedTop)
+	for _, inputPath := range savedTop {
+		processDoc(ctx, s3c, s3Bucket, inputPath, outputDir)
+	}
+
 	// Process products/files
 	for _, p := range summary.Products {
-		for _, remote := range p.LatestFiles {
-			if remote == "" || remote == "/" {
-				continue
-			}
-			// Ensure remote path starts with '/'
-			if !strings.HasPrefix(remote, "/") {
-				remote = "/" + remote
-			}
-			// Local path: outputDir + remote path (preserve structure)
-			localPath := filepath.Join(outputDir, filepath.FromSlash(strings.TrimPrefix(remote, "/")))
-			log.Printf("Downloading %s -> %s", remote, localPath)
-			err := retry(3, 2*time.Second, func() error {
-				return copyFromSFTPToLocal(sconn.client, remote, localPath)
-			})
-			if err != nil {
-				log.Printf("ERROR downloading %s: %v", remote, err)
-				continue
-			}
-
-			// Upload to S3 with key equal to remote path without leading '/'
-			s3key := strings.TrimPrefix(filepath.ToSlash(remote), "/")
-			log.Printf("Uploading to bucket=%s key=%s from %s", s3Bucket, s3key, localPath)
-			err = retry(3, 2*time.Second, func() error {
-				return uploadFile(ctx, s3c, s3Bucket, s3key, localPath)
-			})
-			if err != nil {
-				log.Printf("ERROR uploading %s: %v", s3key, err)
-				continue
-			}
-			log.Printf("Done %s", s3key)
+		// First, process docs similarly to latest files
+		savedDocs := processAndUpload(ctx, s3c, s3Bucket, sconn.client, outputDir, p.Docs)
+		log.Printf("Saved product docs for %s: %v", p.Product, savedDocs)
+		for _, inputPath := range savedDocs {
+			processDoc(ctx, s3c, s3Bucket, inputPath, outputDir)
 		}
+
+		// Then process latest files if less than 100MB
+		if p.AvgSizeLast5 != nil && *p.AvgSizeLast5 > 90000000 && *p.AvgSizeLast5 < 100000000 {
+			savedLatest := processAndUpload(ctx, s3c, s3Bucket, sconn.client, outputDir, p.LatestFiles)
+			log.Printf("Saved latest files for %s: %v", p.Product, savedLatest)
+		}
+
 	}
 	log.Println("All done")
 }

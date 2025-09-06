@@ -8,7 +8,10 @@ RUN go mod download && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /savefiles
 
 # Runtime stage
-FROM gcr.io/distroless/static
+FROM alpine:latest
+
+RUN apk add --no-cache pandoc libreoffice
+
 WORKDIR /
 COPY --from=build /savefiles /savefiles
 ENTRYPOINT ["/savefiles"]
