@@ -26,6 +26,8 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+const ProcessDocsEnabled = false
+
 // Types mirrored from metadataSummary/types.ts
 
 type ProductSummary struct {
@@ -329,6 +331,9 @@ func PandocConvert(inputPath, outputPath string, options []string) error {
 }
 
 func processDoc(ctx context.Context, s3c *s3.Client, s3Bucket, inputPath, outputDir string) error {
+    if !ProcessDocsEnabled {
+        return nil
+    }
 	ext := filepath.Ext(inputPath)
 	if ext != ".doc" && ext != ".docx" && ext != ".txt" {
 		// 	the only formats supported by pandoc
@@ -349,16 +354,28 @@ func processDoc(ctx context.Context, s3c *s3.Client, s3Bucket, inputPath, output
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	// Env
-	metadataPath := getenv("METADATA_PATH", "/output/sftp_file_metadata_summary.json")
-	outputDir := getenv("OUTPUT_DIR", "/output")
 
+	// Positional args:
+	// 1: metadataSummary.json path (required)
+	// 2: output directory (required)
+	// 3: product id to process, e.g. prod200 (optional)
+	if len(os.Args) < 3 {
+		log.Fatalf("usage: %s <metadataSummary.json> <outputDir> [productId]", filepath.Base(os.Args[0]))
+	}
+	metadataPath := os.Args[1]
+	outputDir := os.Args[2]
+	productFilter := ""
+	if len(os.Args) >= 4 {
+		productFilter = os.Args[3]
+	}
+
+	// Env for connections/targets
 	sftpHost := getenv("SFTP_HOST", "bulk-live.companieshouse.gov.uk")
 	sftpPortStr := getenv("SFTP_PORT", "22")
 	sftpPort := 22
 	fmt.Sscanf(sftpPortStr, "%d", &sftpPort)
 	sftpUser := mustGetenv("SFTP_USERNAME")
-	sftpKeyPath := getenv("SFTP_KEY_PATH", "/root/.ssh/ch_key")
+	sftpKeyPath := mustGetenv("SFTP_KEY")
 	sftpKeyPass := getenv("SFTP_KEY_PASSPHRASE", "")
 
 	s3Endpoint := getenv("S3_ENDPOINT", "") // e.g., https://<accountid>.r2.cloudflarestorage.com
@@ -366,6 +383,11 @@ func main() {
 	s3Access := mustGetenv("S3_ACCESS_KEY_ID")
 	s3Secret := mustGetenv("S3_SECRET_ACCESS_KEY")
 	s3Bucket := mustGetenv("S3_BUCKET")
+
+	// Ensure output dir exists
+	if err := ensureDir(outputDir); err != nil {
+		log.Fatalf("failed to create output directory %s: %v", outputDir, err)
+	}
 
 	// Read metadata
 	data, err := os.ReadFile(metadataPath)
@@ -376,6 +398,23 @@ func main() {
 	if err := json.Unmarshal(data, &summary); err != nil {
 		log.Fatalf("failed parsing metadata: %v", err)
 	}
+
+	// Optionally filter products
+	if productFilter != "" {
+		filtered := make([]ProductSummary, 0, 1)
+		for _, p := range summary.Products {
+			if strings.EqualFold(p.Product, productFilter) {
+				filtered = append(filtered, p)
+				break
+			}
+		}
+		if len(filtered) == 0 {
+			log.Printf("Product id %q not found in metadata; nothing to do", productFilter)
+			return
+		}
+		summary.Products = filtered
+	}
+
 	if len(summary.Products) == 0 {
 		log.Println("No products found in summary; exiting")
 		return
@@ -400,6 +439,7 @@ func main() {
 	}
 
 	// Connect SFTP once
+	log.Printf("SFTP key %s", sftpKeyPath)
 	sconn, err := connectSFTP(sftpHost, sftpPort, sftpUser, sftpKeyPath, sftpKeyPass)
 	if err != nil {
 		log.Fatalf("sftp connect error: %v", err)
@@ -423,7 +463,7 @@ func main() {
 		}
 
 		// Then process latest files if less than 100MB
-		if p.AvgSizeLast5 != nil && *p.AvgSizeLast5 > 90000000 && *p.AvgSizeLast5 < 100000000 {
+		if p.AvgSizeLast5 != nil && *p.AvgSizeLast5 > 0 && *p.AvgSizeLast5 < 100000000 {
 			savedLatest := processAndUpload(ctx, s3c, s3Bucket, sconn.client, outputDir, p.LatestFiles)
 			log.Printf("Saved latest files for %s: %v", p.Product, savedLatest)
 		}

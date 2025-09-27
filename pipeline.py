@@ -102,7 +102,7 @@ def crawler_op(context, output_dir: str = str(DEFAULT_OUTPUT_DIR)) -> Output[str
 
     cmd = [
         sys.executable,
-        str(PROJECT_ROOT / "crawler" / "crawl_sftp.py"),
+        str(PROJECT_ROOT / "bin" / "crawl_sftp.py"),
         str(db_path),
     ]
     context.log.info(f"Running crawler: {' '.join(cmd)}")
@@ -130,9 +130,9 @@ def metadata_summary_op(context, db_path: str, output_dir: str = str(DEFAULT_OUT
     out_json = _timestamped_path(out_dir, "sftp_file_metadata_summary").with_suffix(".json")
 
     cmd = [
-        "bun",
+        "/root/.bun/bin/bun",
         "run",
-        str(PROJECT_ROOT / "metadataSummary" / "summarise.ts"),
+        str(PROJECT_ROOT / "bin" / "metadataSummary.ts"),
         str(db_path),
         str(out_json),
     ]
@@ -164,12 +164,9 @@ def save_files_op(context, summary_path: str, output_dir: str = str(DEFAULT_OUTP
     # TODO: for each product in the metadata summary, call saveFiles metadataSummary.json prod200 /output/prod200
     #  - modify saveFiles to take params and output to the specified directory
     #  - only process one product at a time for now.
-    env = _build_subprocess_env({
-        "METADATA_PATH": str(summary_path),
-        "OUTPUT_DIR": str(out_dir),
-    })
+    env = _build_subprocess_env()
 
-    cmd = ["go", "run", "./saveFiles"]
+    cmd = ["./bin/saveFiles", str(summary_path), str(out_dir)]
     context.log.info(f"Running saveFiles: {' '.join(cmd)}")
     subprocess.run(cmd, check=True, cwd=str(PROJECT_ROOT), env=env)
 

@@ -29,3 +29,7 @@ These executables are then run by Python on the Droplet.
 Python orchestration will manage uploading files to S3.
 
 Some stages will require access to the SSH server (crawler and saveFiles), and access details should be env vars.
+
+```powershell
+.\deploy\deploy.ps1
+```
