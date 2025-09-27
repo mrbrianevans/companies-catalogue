@@ -4,6 +4,7 @@ import os
 import sqlite3
 from datetime import datetime
 import time
+import sys
 
 def crawl_sftp(host, port, username, key_path, base_path='/', db_path='sftp_catalogue.db', jsonl_path='sftp_file_metadata_catalogue.jsonl'):
     # Set up SFTP
@@ -50,7 +51,7 @@ def crawl_sftp(host, port, username, key_path, base_path='/', db_path='sftp_cata
         for entry in sftp.listdir_attr(dir_path):
             if entry.filename == 'bulkimage':
                 continue  # skip huge directory
-            full_path = os.path.join(dir_path, entry.filename)
+            full_path = dir_path + '/' + entry.filename
             if entry.longname.startswith('d'):  # Directory
                 recurse(full_path)
             else:  # File
@@ -69,12 +70,15 @@ def crawl_sftp(host, port, username, key_path, base_path='/', db_path='sftp_cata
 
 if __name__ == "__main__":
     username = os.getenv('SFTP_USERNAME')
+    key_path = os.getenv('SFTP_KEY')
+    db_path: str = sys.argv[1]
+    jsonl_path = db_path.replace('.db', '.jsonl')
     crawl_sftp(
         host='bulk-live.companieshouse.gov.uk',
         port=22,
         username=username,
-        key_path='/root/.ssh/ch_key',
+        key_path=key_path,
         base_path='/free',
-        db_path='/output/sftp_catalogue.db',
-        jsonl_path='/output/sftp_file_metadata_catalogue.jsonl'
+        db_path=db_path,
+        jsonl_path=jsonl_path
     )
