@@ -5,6 +5,7 @@ import sqlite3
 from datetime import datetime
 import time
 import sys
+import re
 
 def crawl_sftp(host, port, username, key_path, base_path='/', db_path='sftp_catalogue.db', jsonl_path='sftp_file_metadata_catalogue.jsonl'):
     # Set up SFTP
@@ -29,6 +30,22 @@ def crawl_sftp(host, port, username, key_path, base_path='/', db_path='sftp_cata
     # Open JSONL file for appending
     jsonl_file = open(jsonl_path, "a", encoding="utf-8")
 
+    def get_latest_date_from_db():
+        # pick up from latest crawled directories
+        try:
+            cursor.execute("""SELECT SUBSTR(path, INSTR(path, 'prod'), INSTR(path, '/20')-INSTR(path, 'prod')) AS product,
+                                     MAX(SUBSTR(path, 0, INSTR(path, '/20') + 11)) AS latest
+                              FROM files
+                              WHERE path LIKE '/free/prod%/20%/%/%/%'
+                              GROUP BY 1;""")
+            rows = cursor.fetchall()
+            return {row[0]: row[1] for row in rows}
+        except Exception:
+            return {}
+
+    latest_crawled_dates = get_latest_date_from_db()
+    print(f"Latest crawled dates: {latest_crawled_dates}")
+
     def save_file_metadata(full_path, size, mtime):
         record = {
             'path': full_path,
@@ -50,9 +67,16 @@ def crawl_sftp(host, port, username, key_path, base_path='/', db_path='sftp_cata
     def recurse(dir_path):
         for entry in sftp.listdir_attr(dir_path):
             if entry.filename == 'bulkimage':
-                continue  # skip huge directory
+                continue  # skip huge directory. TODO include this. check it works with resumable.
             full_path = dir_path + '/' + entry.filename
             if entry.longname.startswith('d'):  # Directory
+                if full_path.startswith('/free/prod'):
+                    match = re.match(r'^/free/(prod[A-Z0-9]+)/\d{4}', full_path)
+                    prod_code = match.group(1) if match else None
+                    latest = latest_crawled_dates.get(prod_code, '')
+                    if prod_code and latest and full_path < latest[0:len(full_path)]:
+                        print(f"Skipping {full_path} as it is older than latest crawled date {latest}")
+                        continue
                 recurse(full_path)
             else:  # File
                 print("Found path", full_path, entry.st_size)
@@ -73,6 +97,8 @@ if __name__ == "__main__":
     key_path = os.getenv('SFTP_KEY')
     db_path: str = sys.argv[1]
     jsonl_path = db_path.replace('.db', '.jsonl')
+    print(f"Crawling SFTP to {db_path} and writing JSONL to {jsonl_path}")
+    print(f'Start time: {datetime.now()}')
     crawl_sftp(
         host='bulk-live.companieshouse.gov.uk',
         port=22,
@@ -82,3 +108,4 @@ if __name__ == "__main__":
         db_path=db_path,
         jsonl_path=jsonl_path
     )
+    print(f'Finish time: {datetime.now()}')

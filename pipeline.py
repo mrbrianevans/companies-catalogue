@@ -98,7 +98,7 @@ def crawler_op(context, output_dir: str = str(DEFAULT_OUTPUT_DIR)) -> Output[str
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    db_path = _timestamped_path(out_dir, "sftp_catalogue").with_suffix(".db")
+    db_path = (out_dir / "sftp_catalogue").with_suffix(".db")
 
     cmd = [
         sys.executable,
