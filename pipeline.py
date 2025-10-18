@@ -79,11 +79,6 @@ def _build_subprocess_env(extra: dict | None = None) -> dict:
     return env
 
 
-def _timestamped_path(base: Path, suffix: str) -> Path:
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    return base / f"{suffix}-{ts}"
-
-
 @op(
     out=Out(str, description="Path to the generated SQLite DB file from the SFTP crawl"),
     tags={"stage": "crawler"},
@@ -127,7 +122,7 @@ def metadata_summary_op(context, db_path: str, output_dir: str = str(DEFAULT_OUT
     """
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_json = _timestamped_path(out_dir, "sftp_file_metadata_summary").with_suffix(".json")
+    out_json = (out_dir /"sftp_file_metadata_summary").with_suffix(".json")
 
     cmd = [
         "/root/.bun/bin/bun",
