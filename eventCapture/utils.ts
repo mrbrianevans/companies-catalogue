@@ -1,13 +1,14 @@
 import {mkdir, open, stat} from 'fs/promises';
-import {dirname} from "node:path";
+import {basename, dirname} from "node:path";
 import {S3Client} from "bun";
-import {existsSync} from "node:fs";
+import {createReadStream, existsSync} from "node:fs";
 import {get, RequestOptions} from "https";
-import {setTimeout} from "node:timers/promises";
-import { readdir } from "node:fs/promises";
+import {readdir} from "node:fs/promises";
+import {pipeline} from "node:stream/promises";
+import {createGzip} from "node:zlib";
 
 export async function getLastJsonLine(filePath: string): Promise<Record<string, any> | undefined> {
-    if(!existsSync(filePath)) return undefined;
+    if (!existsSync(filePath)) return undefined;
     const stats = await stat(filePath);
     const size = stats.size;
     if (size === 0) return undefined;
@@ -61,8 +62,10 @@ export async function writeStreamToFile(stream: AsyncIterable<Buffer>, filename:
     const writer = sink.writer()
     let bytesWritten = 0;
     try {
+        // TODO: could this just be await pipeline(stream, createWriteStream(filename))?
+        //  Might be simpler and equal performance.
         for await(const chunk of stream) {
-            if(chunk.length === 1 && chunk[0] === 0x0a) {
+            if (chunk.length === 1 && chunk[0] === 0x0a) {
                 continue //heartbeat received
             }
             bytesWritten += await writer.write(chunk)
@@ -74,18 +77,19 @@ export async function writeStreamToFile(stream: AsyncIterable<Buffer>, filename:
     }
 
     bytesWritten += await writer.end()
-    if(bytesWritten === 0) {
+    if (bytesWritten === 0) {
         console.log('No data written to file', filename)
         await sink.delete()
         return false
-    }else {
+    } else {
         console.log('Wrote', bytesWritten, 'bytes to file', filename)
         return true
     }
 }
 
 
-const { S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, SINK_BUCKET } = process.env
+const {S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, SINK_BUCKET} = process.env
+console.log('S3 Bucket:', SINK_BUCKET,)
 const client = new S3Client({
     accessKeyId: S3_ACCESS_KEY_ID,
     secretAccessKey: S3_SECRET_ACCESS_KEY,
@@ -94,10 +98,20 @@ const client = new S3Client({
     region: S3_REGION
 })
 
-export async function uploadToS3(file: string) {
-    const s3file = client.file(file);
-    const localFile = Bun.file(file);
-    await s3file.write(localFile, {type: 'application/json'});
+export async function uploadToS3(file: string, streamName: string) {
+    console.log(new Date(), 'Uploading', file, 'to S3')
+    const objectPath = getS3ObjectPath(file,streamName)
+    const s3file = client.file(objectPath);
+    const writer = s3file.writer()
+    const bytesWritten = await pipeline(createReadStream(file), createGzip(), async function (source) {
+        let bytesWriten = 0;
+        for await (const chunk of source) {
+            bytesWriten += await writer.write(chunk)
+        }
+        bytesWriten += await writer.end()
+        return bytesWriten
+    })
+    console.log(new Date(), 'Uploaded', bytesWritten, 'bytes to S3', objectPath)
 }
 
 export async function streamFromCh(streamPath: string, startFromTimepoint?: number) {
@@ -106,7 +120,7 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
     const options: RequestOptions = {hostname: "stream.companieshouse.gov.uk", path, auth}
     const responseStream = new Promise<AsyncIterable<Buffer>>((resolve, reject) => get(options, (res) => {
         if (res.statusCode === 200) {
-            console.log('Connected to stream', streamPath, new Date())
+            console.log(new Date(),'Connected to stream', streamPath, )
             // setTimeout(10000).then(() => res.destroy(new Error('test timeout')))
             resolve(res)
         } else reject(new Error(`Failed to connect to stream: ${res.statusCode}`))
@@ -119,11 +133,7 @@ export async function getLastSavedTimepoint(outputDir: string) {
     // Filter for .json files and sort by timestamp (filename is the timestamp)
     const jsonFiles = files
         .filter(f => f.endsWith('.json'))
-        .sort((a, b) => {
-            const timestampA = parseInt(a.replace('.json', ''))
-            const timestampB = parseInt(b.replace('.json', ''))
-            return timestampB - timestampA // Descending order
-        })
+        .sort()
 
     if (jsonFiles.length === 0) {
         return undefined
@@ -132,10 +142,55 @@ export async function getLastSavedTimepoint(outputDir: string) {
     const lastFile = `${outputDir}/${jsonFiles[0]}`
     const lastEvent = await getLastJsonLine(lastFile)
     const timepoint = lastEvent?.event.timepoint;
-    if(timepoint){
+    if (timepoint) {
         console.log('Picking up from timepoint', timepoint)
-    }else{
+    } else {
         console.log('No timepoint found. Starting from scratch.')
     }
     return timepoint
+}
+
+export async function cleanupOldFiles(outputDir: string, streamName:string){
+    const files = await readdir(outputDir)
+    const jsonFiles = files
+        .filter(f => f.endsWith('.json'))
+        .sort()
+    for(const file of jsonFiles){
+        const filePath = `${outputDir}/${file}`
+        const stats = await stat(filePath)
+        const fileAge = Date.now() - stats.mtimeMs
+        const TWO_WEEKS = 1000 * 60 * 60 * 24 * 7 * 2
+        if(fileAge > TWO_WEEKS){
+            const objectPath = getS3ObjectPath(filePath,streamName)
+            const s3file = client.file(objectPath);
+            const uploaded = await s3file.exists()
+            if(uploaded) {
+                console.log(new Date(), 'Deleting old file', filePath)
+                await Bun.file(filePath).delete()
+            }else{
+                console.warn(new Date(), 'Old file not uploaded to S3', filePath)
+            }
+        }
+    }
+}
+
+export async function uploadExistingFilesToS3(outputDir: string, streamName:string){
+    const files = await readdir(outputDir)
+    const jsonFiles = files
+        .filter(f => f.endsWith('.json'))
+        .sort()
+    for(const file of jsonFiles) {
+        const filePath = `${outputDir}/${file}`
+        const objectPath = getS3ObjectPath(filePath,streamName)
+        const s3file = client.file(objectPath);
+        const uploaded = await s3file.exists()
+        if(!uploaded) {
+            console.log(new Date(),'Uploading local file to S3', filePath)
+            await uploadToS3(filePath,streamName)
+        }
+    }
+}
+
+function getS3ObjectPath(filename:string,streamName:string){
+    return `${streamName}/${basename(filename)}.gz`
 }
