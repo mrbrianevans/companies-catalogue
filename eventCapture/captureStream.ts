@@ -37,9 +37,11 @@ process.on('SIGHUP', () => {
     process.exit(0);
 });
 process.on('exit', () => console.log(new Date(),'Exiting process'));
-
+process.on('uncaughtException', (err) => { console.error('uncaughtException',err); });
+process.on('unhandledRejection', (reason) => { console.error('Unhandled Rejection:', reason); })
 
 await uploadExistingFilesToS3(outputDir, streamName)
+await cleanupOldFiles(outputDir,streamName)
 
 
 while (true) {
@@ -54,7 +56,7 @@ while (true) {
         console.error(new Date(),'Error capturing stream', streamName, error)
     } finally {
         console.log(new Date(), 'Pausing before re-connecting to stream')
-        await scheduler.wait(65000)
+        await scheduler.wait(650_000)
     }
 }
 

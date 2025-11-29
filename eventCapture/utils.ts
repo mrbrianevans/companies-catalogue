@@ -42,7 +42,13 @@ export async function getLastJsonLine(filePath: string): Promise<Record<string, 
             const line = lineBuffer.toString('utf8').trim();
             if (line !== '') {
                 try {
-                    return JSON.parse(line);
+                    const parsed = JSON.parse(line);
+                    if(parsed.error){
+                        pos = start - 1;
+                        continue;
+                    }else{
+                        return parsed;
+                    }
                 } catch {
                     pos = start - 1;
                     continue;
@@ -139,8 +145,9 @@ export async function getLastSavedTimepoint(outputDir: string) {
         return undefined
     }
 
-    const lastFile = `${outputDir}/${jsonFiles[0]}`
+    const lastFile = `${outputDir}/${jsonFiles.at(-1)}`
     const lastEvent = await getLastJsonLine(lastFile)
+    console.log('Last event', lastEvent)
     const timepoint = lastEvent?.event.timepoint;
     if (timepoint) {
         console.log('Picking up from timepoint', timepoint)
@@ -155,12 +162,14 @@ export async function cleanupOldFiles(outputDir: string, streamName:string){
     const jsonFiles = files
         .filter(f => f.endsWith('.json'))
         .sort()
+        .slice(0,-1) // never delete the last file
     for(const file of jsonFiles){
         const filePath = `${outputDir}/${file}`
         const stats = await stat(filePath)
         const fileAge = Date.now() - stats.mtimeMs
-        const TWO_WEEKS = 1000 * 60 * 60 * 24 * 7 * 2
-        if(fileAge > TWO_WEEKS){
+        // keep files for at least 2 days to allow picking up from prior timepoint
+        const TWO_DAYS = 1000 * 60 * 60 * 24 * 2
+        if(fileAge > TWO_DAYS){
             const objectPath = getS3ObjectPath(filePath,streamName)
             const s3file = client.file(objectPath);
             const uploaded = await s3file.exists()
