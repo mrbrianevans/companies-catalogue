@@ -1,5 +1,5 @@
-import {mkdir, open, stat} from 'fs/promises';
-import {basename, dirname} from "node:path";
+import {open, stat} from 'fs/promises';
+import {basename} from "node:path";
 import {S3Client} from "bun";
 import {createReadStream, existsSync} from "node:fs";
 import {get, RequestOptions} from "https";
@@ -62,8 +62,6 @@ export async function getLastJsonLine(filePath: string): Promise<Record<string, 
 }
 
 export async function writeStreamToFile(stream: AsyncIterable<Buffer>, filename: string) {
-    const outDir = dirname(filename)
-    await mkdir(outDir, {recursive: true})
     const sink = Bun.file(filename)
     const writer = sink.writer()
     let bytesWritten = 0;
@@ -127,7 +125,7 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
     const responseStream = new Promise<AsyncIterable<Buffer>>((resolve, reject) => get(options, (res) => {
         if (res.statusCode === 200) {
             console.log(new Date(),'Connected to stream', streamPath, )
-            // setTimeout(10000).then(() => res.destroy(new Error('test timeout')))
+            setTimeout(() => res.destroy(new Error('self-terminated connection after some time')),60_000)
             resolve(res)
         } else reject(new Error(`Failed to connect to stream: ${res.statusCode}`))
     }).end())

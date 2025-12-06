@@ -6,7 +6,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from dagster import In, Nothing, Out, Output, job, op, repository, schedule
+from dagster import In, Nothing, Out, Output, job, op, repository, schedule, DynamicOut, DynamicOutput
 
 # schedule for 5am every morning
 
@@ -166,10 +166,35 @@ def save_files_op(context, summary_path: str, output_dir: str = str(DEFAULT_OUTP
     subprocess.run(cmd, check=True, cwd=str(PROJECT_ROOT), env=env)
 
 
+@op(
+    ins={"stream_name": In(str)},
+    out=Out(Nothing),
+    tags={"stage": "captureStream"},
+)
+def capture_stream(context, stream_name: str, output_dir: str = str(DEFAULT_OUTPUT_DIR)) -> None:
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    env = _build_subprocess_env()
+    cmd = ["bun", "./bin/captureStream.ts", str(stream_name), str(out_dir)]
+    context.log.info(f"Running captureStream: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True, cwd=str(PROJECT_ROOT), env=env)
+
+
+streams = ['companies', 'filings', 'officers', 'persons-with-significant-control', 'charges', 'insolvency-cases', 'disqualified-officers', 'company-exemptions', 'persons-with-significant-control-statements']
+
+
+@op(out=DynamicOut())
+def start_capture():
+    for stream in streams:
+        yield DynamicOutput(stream, mapping_key=stream.replace("-", "_"))
+
+
 @job
 def companies_catalogue_job():
     summary = metadata_summary_op(crawler_op())
     save_files_op(summary)
+
+    start_capture().map(capture_stream)
 
 
 @schedule(cron_schedule="0 5 * * *", job=companies_catalogue_job, execution_timezone="UTC")
@@ -181,4 +206,3 @@ def daily_5am_schedule(_context):
 @repository
 def companies_catalogue_repo():
     return [companies_catalogue_job, daily_5am_schedule]
-

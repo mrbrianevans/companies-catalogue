@@ -8,6 +8,7 @@ import {
     writeStreamToFile
 } from "./utils";
 import { randomUUIDv7 } from "bun";
+import {mkdir} from "fs/promises";
 
 /*
 
@@ -21,6 +22,7 @@ const streamName = process.argv[2]
 if (!streamName) throw new Error('No stream name provided. Usage bun captureStream [officers]')
 
 const outputDir = `output/${streamName}`
+await mkdir(outputDir, {recursive: true})
 console.log(new Date(),'Output directory', outputDir)
 
 // Track process exits
@@ -43,20 +45,25 @@ process.on('unhandledRejection', (reason) => { console.error('Unhandled Rejectio
 await uploadExistingFilesToS3(outputDir, streamName)
 await cleanupOldFiles(outputDir,streamName)
 
-
-while (true) {
+async function captureStream() {
     try {
         const lastTimepoint = await getLastSavedTimepoint(outputDir)
-        const incomingStream = await streamFromCh(streamName, lastTimepoint + 1)
+        const pickUpFrom = lastTimepoint ? lastTimepoint + 1 : undefined
+        const incomingStream = await streamFromCh(streamName, pickUpFrom)
         const outputName = `${outputDir}/${randomUUIDv7()}.json`
         const written = await writeStreamToFile(incomingStream, outputName)
-        if(written) await uploadToS3(outputName,streamName)
-        await cleanupOldFiles(outputDir,streamName)
+        if (written) await uploadToS3(outputName, streamName)
+        await cleanupOldFiles(outputDir, streamName)
     } catch (error) {
-        console.error(new Date(),'Error capturing stream', streamName, error)
-    } finally {
-        console.log(new Date(), 'Pausing before re-connecting to stream')
-        await scheduler.wait(650_000)
+        console.error(new Date(), 'Error capturing stream', streamName, error)
     }
 }
 
+await captureStream()
+
+// uncomment for a persistent capture device. as of December 2025, Bun consumes 100% CPU after a while of running this. (a bug related to idle http connections?)
+// while (true) {
+//     await captureStream()
+//     console.log(new Date(), 'Pausing before re-connecting to stream')
+//     await scheduler.wait(650000)
+// }
