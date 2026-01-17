@@ -6,7 +6,20 @@ const makeError = (code: number, message: string) => Response.json({error: messa
 
 const server = Bun.serve({
     routes: {
-        '/:path': async (request, _server) => {
+        // This allows consumers to check what a valid range of timepoint to request is.
+        '/timepoints/:path': async (request)=>{
+            const path = request.params.path
+            if (!streams.includes(path))
+                return makeError(400, 'Invalid stream. Options: ' + streams.join(', '))
+            const validRange = await getMinMaxRange(path)
+            if (!validRange)
+                return makeError(501, 'No data available for ' + path)
+
+            return Response.json(validRange)
+        },
+
+        // This is the streaming endpoint. Path must be /filings, /companies etc.
+        '/:path': async (request) => {
             try {
                 const path = request.params.path
                 const timepointInputString = new URL(request.url).searchParams.get('timepoint')

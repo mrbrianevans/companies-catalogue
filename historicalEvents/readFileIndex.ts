@@ -3,6 +3,7 @@ import { DuckDBInstance, INTEGER, VARCHAR } from '@duckdb/node-api';
 // This file retrieves data from the index of files,
 // which stores the min and max timepoint of each file in S3.
 
+// Is there an option to make this connection read-only?
 const db = await DuckDBInstance.create('./index.db');
 const connection = await db.connect();
 
