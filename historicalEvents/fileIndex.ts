@@ -1,4 +1,7 @@
-import {DuckDBInstance, INTEGER, VARCHAR} from '@duckdb/node-api';
+import { DuckDBInstance, INTEGER, VARCHAR } from '@duckdb/node-api';
+
+// This file retrieves data from the index of files,
+// which stores the min and max timepoint of each file in S3.
 
 const db = await DuckDBInstance.create('./index.db');
 const connection = await db.connect();
@@ -33,14 +36,16 @@ export async function getMinMaxRange(stream: string){
         stream
     }, { stream: VARCHAR})
 
-    const range = output.getRowObjects()[0] as {stream_min:number, stream_max: number}
-    const {stream_min:min, stream_max: max} = range
+    const bigIntRange = output.getRowObjects()[0] as {stream_min:bigint, stream_max: bigint}
+    const {stream_min:min, stream_max: max} = bigIntRange
 
     if(!min || !max) {
         console.warn('No data indexed for ', stream)
         return null
     }
 
-    console.log('Min max range for', stream, {min, max})
-    return {min, max}
+    const range = {min: Number(min), max: Number(max)};
+
+    console.log('Min max range for', stream, range)
+    return range
 }

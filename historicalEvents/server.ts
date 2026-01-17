@@ -1,33 +1,40 @@
-import {getHistoricalStream} from "./handler.js";
-import {getMinMaxRange} from "./fileSequence.js";
-import * as stream from "node:stream";
+import { getHistoricalStream } from "./handler.js";
+import { getMinMaxRange } from "./fileIndex.js";
 
 const streams = ['companies', 'filings', 'officers', 'persons-with-significant-control', 'charges', 'insolvency-cases', 'disqualified-officers', 'company-exemptions', 'persons-with-significant-control-statements']
-const invalidStreamMessage = 'Invalid stream. Valid '+streams.join(', ')
+const makeError = (code: number, message: string) => Response.json({error: message}, {status: code})
 
 const server = Bun.serve({
     routes: {
         '/:path': async (request, _server) => {
-            const path =  request.params.path
-            const timepointInputString = new URL(request.url).searchParams.get('timepoint')
+            try {
+                const path = request.params.path
+                const timepointInputString = new URL(request.url).searchParams.get('timepoint')
 
-            // Request validation
-            if(!streams.includes(path))
-                return Response.json({error: invalidStreamMessage}, {status:400})
-            if(!timepointInputString)
-                return Response.json({error: 'Missing timepoint parameter'}, {status: 400})
-            const timepoint = Number(timepointInputString)
-            if(isNaN(timepoint))
-                return Response.json({error: 'Invalid timepoint parameter'}, {status: 400})
+                // Request validation
+                if (!streams.includes(path))
+                    return makeError(400, 'Invalid stream. Options: ' + streams.join(', '))
+                if (!timepointInputString)
+                    return makeError(400, 'Missing timepoint parameter')
+                const timepoint = Number(timepointInputString)
+                if (isNaN(timepoint))
+                    return makeError(400, 'Invalid timepoint parameter')
 
-            const validRange = await getMinMaxRange(path)
-            if(!validRange)
-                return Response.json({error: 'No data available for '+path}, {status: 501})
-            if(timepoint > validRange.max || timepoint < validRange.min)
-                return Response.json({error: 'Sorry, timepoint out of range'}, {status: 416})
+                const validRange = await getMinMaxRange(path)
+                if (!validRange)
+                    return makeError(501, 'No data available for ' + path)
 
-            const outputStream = await getHistoricalStream(path, timepoint)
-            return new Response(outputStream)
+                if (timepoint > validRange.max)
+                    return makeError(416, 'Timepoint out range (too big)')
+                if (timepoint < validRange.min)
+                    return makeError(416, 'Timepoint out range (too small)')
+
+                const outputStream = await getHistoricalStream(path, timepoint)
+                return new Response(outputStream)
+            }catch(error){
+                console.error('Internal error',error)
+                return makeError(500, 'Internal server error')
+            }
         }
     }
 })
