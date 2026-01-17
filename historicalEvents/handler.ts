@@ -1,5 +1,5 @@
 import { PassThrough, Readable, Writable } from 'node:stream'
-import { getFileSequence } from "./fileIndex.js";
+import { getFileSequence } from "./readFileIndex.js";
 import { s3 } from 'bun'
 import { createGunzip } from 'node:zlib'
 import { pipeline } from "node:stream/promises";

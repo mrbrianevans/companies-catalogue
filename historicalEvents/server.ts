@@ -1,5 +1,5 @@
 import { getHistoricalStream } from "./handler.js";
-import { getMinMaxRange } from "./fileIndex.js";
+import { getMinMaxRange } from "./readFileIndex.js";
 
 const streams = ['companies', 'filings', 'officers', 'persons-with-significant-control', 'charges', 'insolvency-cases', 'disqualified-officers', 'company-exemptions', 'persons-with-significant-control-statements']
 const makeError = (code: number, message: string) => Response.json({error: message}, {status: code})
