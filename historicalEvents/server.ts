@@ -3,6 +3,7 @@ import {getMinMaxRange} from "./fileSequence.js";
 import * as stream from "node:stream";
 
 const streams = ['companies', 'filings', 'officers', 'persons-with-significant-control', 'charges', 'insolvency-cases', 'disqualified-officers', 'company-exemptions', 'persons-with-significant-control-statements']
+const invalidStreamMessage = 'Invalid stream. Valid '+streams.join(', ')
 
 const server = Bun.serve({
     routes: {
@@ -12,18 +13,18 @@ const server = Bun.serve({
 
             // Request validation
             if(!streams.includes(path))
-                return new Response('Invalid stream. Choose from '+streams.join(', '), {status:400})
+                return Response.json({error: invalidStreamMessage}, {status:400})
             if(!timepointInputString)
-                return new Response('Missing timepoint parameter', {status: 400})
+                return Response.json({error: 'Missing timepoint parameter'}, {status: 400})
             const timepoint = Number(timepointInputString)
             if(isNaN(timepoint))
-                return new Response('Invalid timepoint parameter', {status: 400})
+                return Response.json({error: 'Invalid timepoint parameter'}, {status: 400})
 
             const validRange = await getMinMaxRange(path)
             if(!validRange)
-                return new Response('No data available for '+path, {status: 501})
+                return Response.json({error: 'No data available for '+path}, {status: 501})
             if(timepoint > validRange.max || timepoint < validRange.min)
-                return new Response('Sorry, timepoint out of range', {status: 416})
+                return Response.json({error: 'Sorry, timepoint out of range'}, {status: 416})
 
             const outputStream = await getHistoricalStream(path, timepoint)
             return new Response(outputStream)
