@@ -2,6 +2,7 @@ import { handleStreamRequest} from "./handler.js";
 import { getMinMaxRange } from "./readFileIndex.js";
 import {makeError, streams} from "./utils.js";
 
+//TODO: set a "cron" interval in bun to refresh the index every day
 
 const server = Bun.serve({
     routes: {
@@ -19,9 +20,10 @@ const server = Bun.serve({
 
         // This is the streaming endpoint. Path must be /filings, /companies etc.
         '/:path': async (request) => {
+            //TODO: handle HEAD requests. don't think we can work out content-length since the source is gzipped unfortunately.
             const path = request.params.path
             const timepointInputString = new URL(request.url).searchParams.get('timepoint')
-            return handleStreamRequest(path, timepointInputString)
+            return handleStreamRequest(path, timepointInputString, request.signal)
         }
     }
 })

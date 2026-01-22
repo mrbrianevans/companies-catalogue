@@ -7,7 +7,7 @@ import { compose } from "node:stream";
 import split2 from 'split2';
 import {makeError, streams} from "./utils.js";
 
-export async function handleStreamRequest(path:string, timepointInputString:string|null):Promise<Response>{
+export async function handleStreamRequest(path:string, timepointInputString:string|null, abortSignal: AbortSignal):Promise<Response>{
     try {
 
         // Request validation
@@ -28,7 +28,7 @@ export async function handleStreamRequest(path:string, timepointInputString:stri
         if (timepoint < validRange.min)
             return makeError(416, 'Timepoint out range (too small)')
 
-        const outputStream = await getHistoricalStream(path, timepoint)
+        const outputStream = await getHistoricalStream(path, timepoint, abortSignal)
         // @ts-ignore - should be using Bun's response type
         return new Response(outputStream)
     }catch(error){
@@ -37,7 +37,7 @@ export async function handleStreamRequest(path:string, timepointInputString:stri
     }
 }
 
-export async function getHistoricalStream(path: string, timepoint: number): Promise<Readable>{
+export async function getHistoricalStream(path: string, timepoint: number, abortSignal: AbortSignal): Promise<Readable>{
     const files = await getFileSequence(path, timepoint)
 
     const firstPath = new URL(files[0]).pathname.slice(1);
@@ -45,7 +45,8 @@ export async function getHistoricalStream(path: string, timepoint: number): Prom
     if(!firstFileExists) throw new Error('Indexed file not accessible in S3 '+files[0]);
 
     const stream = new PassThrough();
-    streamFilesToPassThrough(stream, files, timepoint)
+    stream.setMaxListeners(2*files.length + 1)
+    streamFilesToPassThrough(stream, files, timepoint,abortSignal)
         .then(()=> {
             console.log('Finished streaming peacefully')
             stream.end()
@@ -58,7 +59,7 @@ export async function getHistoricalStream(path: string, timepoint: number): Prom
 }
 
 function seekInFile(filename: string, timepoint: number): Readable {
-    return streamWholeFile(filename).on('error', (err) => {console.log('whole file rror', err)})
+    return streamWholeFile(filename).on('error', (err) => {console.log('whole file error', err)})
         .pipe(split2(JSON.parse))
         .filter(event => event.event.timepoint >= timepoint)
         .map(event => Buffer.from(JSON.stringify(event)+'\n'))
@@ -73,16 +74,15 @@ function streamWholeFile(fullS3Path: string): Readable {
     return compose(fileStream, unzipper)
 }
 
-async function streamFilesToPassThrough(outputStream: Writable, files: string[], timepoint: number){
+async function streamFilesToPassThrough(outputStream: Writable, files: string[], timepoint: number, abortSignal: AbortSignal){
     const [firstFile, ...restFiles] = files;
     {
         const fileStream = seekInFile(firstFile, timepoint)
-        await pipeline(fileStream, outputStream)
+        await pipeline(fileStream, outputStream, {end: false, signal: abortSignal})
     }
 
     for(const file of restFiles){
         const fileStream = streamWholeFile(file)
-        await pipeline(fileStream, outputStream)
-        outputStream.write('\n') // separate each file
+        await pipeline(fileStream, outputStream, {end: false,signal: abortSignal})
     }
 }
