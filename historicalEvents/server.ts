@@ -1,8 +1,13 @@
 import { handleStreamRequest} from "./handler.js";
 import { getMinMaxRange } from "./readFileIndex.js";
 import {makeError, streams} from "./utils.js";
+import {updateIndex} from "./writeFileIndex.js";
+import {connection} from "./duckdbConnection.js";
 
-//TODO: set a "cron" interval in bun to refresh the index every day
+// set a "cron" interval in bun to refresh the index every day
+setInterval(()=>
+    updateIndex(connection)
+,86400_000)
 
 const server = Bun.serve({
     routes: {
