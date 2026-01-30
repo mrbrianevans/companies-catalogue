@@ -8,6 +8,7 @@ import {connection} from "./duckdbConnection.js";
 setInterval(()=>
     updateIndex(connection)
 ,86400_000)
+updateIndex(connection)
 
 const server = Bun.serve({
     routes: {
