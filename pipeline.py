@@ -203,6 +203,32 @@ def daily_5am_schedule(_context):
     return {}
 
 
+@op
+def stream_data_lakehouse(context, stream_name: str):
+    # The goal is to convert the zipped json files into parquet files.
+    # The path of the parquet should be /stream=officers/min_123_max_456.parquet
+    # Only the envelope should have a schema (resource_uri etc). event.data should be a JSON data type.
+    # Each file should contain exactly a million events.
+    
+    # The bit I'm not sure on is how to know which JSON files to read in the batch job.
+    # We don't want to read all historical files to do this.
+    # Initial ideas are to base it on the last timestamp in the lake, and filter files by the UUIDv7 timestamp of that last event.
+    # Or we could read the first line of every file and filter ones which are before the "million" we're currently processing.
+    # Reading the first line doesn't seem particularly efficient. Duckdb sent 7 requests in my test.
+    # Could we store the last file that was converted? And only go from there.
+    pass
+
+
+@job
+def stream_data_lakehouse_job():
+    start_capture().map(stream_data_lakehouse)
+
+
+@schedule(cron_schedule="0 8 1 * *", job=stream_data_lakehouse_job, execution_timezone="UTC")
+def monthly_schedule(_context):
+    return {}
+
+
 @repository
 def companies_catalogue_repo():
     return [companies_catalogue_job, daily_5am_schedule]
