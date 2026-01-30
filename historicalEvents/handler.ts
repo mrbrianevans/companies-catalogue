@@ -8,6 +8,7 @@ import split2 from 'split2';
 import {makeError, streams} from "./utils.js";
 
 export async function handleStreamRequest(path:string, timepointInputString:string|null, abortSignal: AbortSignal):Promise<Response>{
+    console.log(new Date(), 'Handling stream request for', path, timepointInputString)
     try {
 
         // Request validation
@@ -29,8 +30,16 @@ export async function handleStreamRequest(path:string, timepointInputString:stri
             return makeError(416, 'Timepoint out range (too small)')
 
         const outputStream = await getHistoricalStream(path, timepoint, abortSignal)
+        const headers = new Headers({
+            // to exactly match companies house headers
+            'access-control-allow-credentials': 'true',
+            'access-control-allow-headers': 'origin, content-type, content-length, user-agent, host, accept, authorization',
+            'access-control-expose-headers': 'Location, www-authenticate, cache-control, pragma, content-type, expires, last-modified',
+            'access-control-max-age': '3600',
+            'content-type': 'text/plain; charset=utf-8'
+        })
         // @ts-ignore - should be using Bun's response type
-        return new Response(outputStream)
+        return new Response(outputStream, {headers})
     }catch(error){
         console.error('Internal error',error)
         return makeError(500, 'Internal server error')
@@ -45,10 +54,10 @@ export async function getHistoricalStream(path: string, timepoint: number, abort
     if(!firstFileExists) throw new Error('Indexed file not accessible in S3 '+files[0]);
 
     const stream = new PassThrough();
-    stream.setMaxListeners(2*files.length + 1)
+    stream.setMaxListeners(2*files.length + 3)
     streamFilesToPassThrough(stream, files, timepoint,abortSignal)
         .then(()=> {
-            console.log('Finished streaming peacefully')
+            console.log(new Date(), 'Finished streaming peacefully')
             stream.end()
         })
         .catch((reason)=> {
@@ -60,9 +69,16 @@ export async function getHistoricalStream(path: string, timepoint: number, abort
 
 function seekInFile(filename: string, timepoint: number): Readable {
     return streamWholeFile(filename).on('error', (err) => {console.log('whole file error', err)})
-        .pipe(split2(JSON.parse))
-        .filter(event => event.event.timepoint >= timepoint)
-        .map(event => Buffer.from(JSON.stringify(event)+'\n'))
+            .pipe(split2())
+            .filter(line => {
+                // use regex to find timepoint. quicker than JSON parse (less cpu usage)
+                if(!line) return false
+                const match = line.match(/"timepoint":\s*(\d+)/);
+                if(!match) return false;
+                const eventTimepoint =  Number(match[1]) ;
+                return eventTimepoint >= timepoint
+            })
+            .map(event => Buffer.from((event)+'\n'))
 }
 
 function streamWholeFile(fullS3Path: string): Readable {

@@ -55,21 +55,23 @@ CREATE TABLE IF NOT EXISTS files AS (
 
 
 export async function updateIndex(dbConn: DuckDBConnection){
-    console.log('Updating index')
+    console.log(new Date(), 'Updating index')
     // find files in S3 that aren't indexed
     const res = await dbConn.runAndReadAll(`
     SELECT file 
     FROM glob('s3://companies-stream-sink/*/*.json.gz')
-    WHERE file NOT IN (SELECT filename FROM files);
+    WHERE file NOT IN (SELECT filename FROM files)
+    LIMIT 20;
     `)
 
     const files = res.getRowObjects().map(f=>f.file as string)
 
-    console.log('Inserting files into index', files)
+    if(files.length) {
+        console.log('Inserting files into index', files)
 
-    console.time('update index')
+        console.time('update index')
 // add any missing ones. seems to be rebuilding from scratch before filtering out ones already done.
-    await dbConn.run(`
+        await dbConn.run(`
     INSERT INTO files (
         SELECT filename,
             MIN(event.timepoint) as min,
@@ -82,6 +84,16 @@ export async function updateIndex(dbConn: DuckDBConnection){
         WHERE filename NOT IN (SELECT filename FROM files)
         GROUP BY filename
     );
-`, )
-    console.timeEnd('update index')
+`,)
+        console.timeEnd('update index')
+    }else{
+        console.log('No new files to index')
+        const res = await dbConn.runAndReadAll(`
+            SELECT stream, COUNT(*) as file_count 
+            FROM files
+            GROUP BY stream
+            ;
+    `)
+        console.log('Index contains', res.getRowObjects().map(f=>`\n${f.stream}: ${f.file_count}`))
+    }
 }
