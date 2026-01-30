@@ -1,11 +1,19 @@
 import split2 from "split2";
 import { Readable } from "node:stream";
 
-const earliestCharges = "3508711";
-const earliestCompanies = "105420168";
-const latestCompanies = 107315293;
+const limit = 1_000_000
+const stream = process.argv[2] ||'persons-with-significant-control-statements'
+console.log("Testing", stream, 'stream');
+const timepointRes = await fetch(`https://companies.stream/${stream}/timepoint`);
+if(!timepointRes.ok) throw new Error(
+    `Failed to fetch timepoint for ${stream} stream: ${timepointRes.status} ${timepointRes.statusText}`
+)
+const timepointJson = await timepointRes.json();
 
-const url = `https://companies.stream/companies?timepoint=${latestCompanies - 120_000}`;
+const startTestFrom = Math.max(timepointJson.max - limit, timepointJson.min)
+console.log("Starting test from", startTestFrom, 'on', stream, 'stream');
+console.log("Timepoint range", timepointJson.min, 'to',timepointJson.max);
+const url = `https://companies.stream/${stream}?timepoint=${startTestFrom}`;
 
 console.time("Stream");
 const start = Date.now();
@@ -14,24 +22,34 @@ const {signal} = ac
 const res = await fetch(url, {signal});
 console.log("Response code", res.status, res.statusText);
 
-const events = Readable.fromWeb(res.body!, {signal}).pipe(split2());
+const events = Readable.fromWeb(res.body!, {signal}).pipe(split2(),{end: true});
 
 let counter = 0;
-let timepointTracker = 0;
+let timepointTracker = startTestFrom;
 
+let ttfb
 for await (const rawEvent of events) {
+  if(!ttfb){
+    ttfb = Date.now() - start;
+    console.log("Time to first byte", ttfb, "ms");
+  }
   try {
     const parsedEvent = JSON.parse(rawEvent);
+    if(limit < 1000) process.stdout.write(".");
     if (parsedEvent.event.timepoint !== timepointTracker++) {
       process.stdout.write("-");
       timepointTracker = parsedEvent.event.timepoint + 1;
     }
   } catch (e) {
     process.stdout.write("x");
+    console.error("Error parsing event", rawEvent);
   }
   counter++;
   // To test cancelling a request
-  // if (counter % 100 === 0) ac.abort()
+  if (counter % 100 === 0) {
+    ac.abort()
+    break;
+  }
   if (counter % 100_000 === 0) console.timeLog("Stream", counter);
 }
 
