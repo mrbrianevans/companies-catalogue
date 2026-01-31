@@ -145,7 +145,7 @@ export async function getLastSavedTimepoint(outputDir: string) {
 
     const lastFile = `${outputDir}/${jsonFiles.at(-1)}`
     const lastEvent = await getLastJsonLine(lastFile)
-    console.log('Last event', lastEvent)
+    console.log('Last event', lastEvent?.event)
     const timepoint = lastEvent?.event.timepoint;
     if (timepoint) {
         console.log('Picking up from timepoint', timepoint)

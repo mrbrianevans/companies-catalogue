@@ -197,9 +197,8 @@ def companies_catalogue_job():
     start_capture().map(capture_stream)
 
 
-@schedule(cron_schedule="0 5 * * *", job=companies_catalogue_job, execution_timezone="UTC")
+@schedule(cron_schedule="0 5 * * *", job=companies_catalogue_job, execution_timezone="Europe/London")
 def daily_5am_schedule(_context):
-    # Use defaults; can be overridden via run config in Dagster UI/launchers
     return {}
 
 
@@ -227,11 +226,11 @@ def stream_data_lakehouse_job():
     start_capture().map(stream_data_lakehouse)
 
 # currently runs an hour after the capture job starts. could make it depend on that job.
-@schedule(cron_schedule="0 6 * * *", job=stream_data_lakehouse_job, execution_timezone="UTC")
-def monthly_schedule(_context):
+@schedule(cron_schedule="0 6 * * *", job=stream_data_lakehouse_job, execution_timezone="Europe/London")
+def lakehouse_schedule(_context):
     return {}
 
 
 @repository
 def companies_catalogue_repo():
-    return [companies_catalogue_job, daily_5am_schedule, monthly_schedule, stream_data_lakehouse_job]
+    return [companies_catalogue_job, daily_5am_schedule, lakehouse_schedule, stream_data_lakehouse_job]
