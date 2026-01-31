@@ -9,7 +9,6 @@ const getSchema = (streamPath:string) => streamPath.replaceAll(/[^a-z0-9_]/gi, '
 async function setupLakehouseConnection() {
 
     const tmpDbFilepath = tmpdir() + `/${randomUUIDv7()}_catalogue.ducklake`
-    const tmpDuckdbFilepath = tmpdir() + `/${randomUUIDv7()}_catalogue.duckdb`
     const tempDbFile = Bun.file(tmpDbFilepath)
     const db = await DuckDBInstance.create(':memory:');
     const connection = await db.connect();
@@ -41,7 +40,6 @@ CREATE SECRET lakehouse (
     METADATA_PATH '${tempDbFile.name}',
     DATA_PATH 's3://${process.env.LAKE_BUCKET}/'
 );
-ATTACH '${tmpDuckdbFilepath}' AS local_db;
 `)
 
     const remoteCataloguePath = 'catalogue.ducklake'
@@ -89,7 +87,7 @@ async function main(streamPath: string) {
     console.log('tables in lakehouse', tables)
 
     await connection.run(`
-        CREATE TABLE IF NOT EXISTS lakehouse.${getSchema(streamPath)}.events
+        CREATE TABLE IF NOT EXISTS events
         (
             resource_kind VARCHAR,
             resource_id VARCHAR,
@@ -97,7 +95,7 @@ async function main(streamPath: string) {
             "data" JSON,
             "event" STRUCT(timepoint BIGINT, published_at VARCHAR, "type" VARCHAR)
         );
-        CREATE TABLE IF NOT EXISTS lakehouse.${getSchema(streamPath)}.snapshot AS FROM events WITH NO DATA;
+        CREATE TABLE IF NOT EXISTS snapshot AS FROM events WITH NO DATA;
     `)
 
     await connection.run(`CREATE SCHEMA IF NOT EXISTS cc_metadata;`)
@@ -112,26 +110,24 @@ async function main(streamPath: string) {
         FROM glob('s3://companies-stream-sink/${streamPath}/*.json.gz')
         WHERE file NOT IN (SELECT file FROM cc_metadata.loaded_files)
         ORDER BY file ASC
-        LIMIT 5;
+        LIMIT 50;
     `)
 
     const files = res.getRowObjects().map(f => f.file as string)
     if (files.length) {
         console.log('Loading', files.length, 'files into lakehouse', files)
 
-        //TODO: can we do away with the temporary table? it will consume disk space for big files.
-        await connection.run(`CREATE OR REPLACE TABLE local_db.new_events_tmp AS FROM events WITH NO DATA;`)
-        await connection.run(`INSERT INTO local_db.new_events_tmp BY NAME
-                              SELECT *
-                              FROM read_json(${JSON.stringify(files)});`)
-        console.log('Loaded', files.length, 'files into new_events_tmp')
         await connection.run('BEGIN TRANSACTION;')
+        console.time('load events')
         await connection.run(`
             INSERT INTO events BY NAME
-            (FROM local_db.new_events_tmp
-             WHERE event.timepoint > (SELECT MAX(event.timepoint) FROM events)
+            (FROM read_json(${JSON.stringify(files)})
+             WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM events)
                 );`)
+        console.timeEnd('load events')
         console.log('Loaded', files.length, 'files into main events table')
+
+        console.time('merge snapshot')
         await connection.run(`
         WITH new_events AS (SELECT * FROM events WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot) ORDER BY event.timepoint ASC),  
             latest AS (SELECT resource_uri, MAX(event.timepoint) as max_timepoint FROM new_events GROUP BY resource_uri),
@@ -142,7 +138,7 @@ async function main(streamPath: string) {
           WHEN NOT MATCHED THEN INSERT BY NAME
             WHEN MATCHED THEN UPDATE;
         `)
-        console.log('Merged snapshot table')
+        console.timeEnd('merge snapshot')
 
         await connection.run(`INSERT INTO cc_metadata.loaded_files
                               VALUES ${files.map(f => `('${f}')`).join(',')};`)
@@ -150,7 +146,6 @@ async function main(streamPath: string) {
 
         await connection.run('COMMIT;')
 
-        await connection.run('DROP TABLE local_db.new_events_tmp;')
         // await connection.run('CHECKPOINT;') // Do this once a week/month
     }
     await saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePath})
