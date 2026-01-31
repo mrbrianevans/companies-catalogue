@@ -109,19 +109,26 @@ async function main(streamPath: string) {
         SELECT file
         FROM glob('s3://companies-stream-sink/${streamPath}/*.json.gz')
         WHERE file NOT IN (SELECT file FROM cc_metadata.loaded_files)
-        ORDER BY file ASC
-        LIMIT 50;
+        ORDER BY file ASC;
     `)
 
-    const files = res.getRowObjects().map(f => f.file as string)
+    const allFiles = res.getRowObjects().map(f => f.file as string)
+    const files = allFiles.slice(0, 2)
+
     if (files.length) {
-        console.log('Loading', files.length, 'files into lakehouse', files)
+        console.log('Loading', files.length, 'of', allFiles.length,'files into lakehouse', files)
 
         await connection.run('BEGIN TRANSACTION;')
         console.time('load events')
         await connection.run(`
             INSERT INTO events BY NAME
-            (FROM read_json(${JSON.stringify(files)})
+            (FROM read_json(${JSON.stringify(files)}, columns = {
+                resource_kind: 'VARCHAR',
+                resource_id: 'VARCHAR', 
+                resource_uri: 'VARCHAR',
+                data: 'JSON',
+                event: 'STRUCT(timepoint BIGINT, published_at VARCHAR, type VARCHAR)'
+            }, auto_detect = false)
              WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM events)
                 );`)
         console.timeEnd('load events')
