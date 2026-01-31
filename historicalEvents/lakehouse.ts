@@ -111,27 +111,38 @@ async function main(streamPath: string) {
         FROM glob('s3://companies-stream-sink/${streamPath}/*.json.gz')
         WHERE file NOT IN (SELECT file FROM cc_metadata.loaded_files)
         ORDER BY file ASC
-        LIMIT 2;
+        LIMIT 5;
     `)
 
     const files = res.getRowObjects().map(f => f.file as string)
     if (files.length) {
         console.log('Loading', files.length, 'files into lakehouse', files)
 
-
+        //TODO: can we do away with the temporary table? it will consume disk space for big files.
         await connection.run(`CREATE OR REPLACE TABLE local_db.new_events_tmp AS FROM events WITH NO DATA;`)
         await connection.run(`INSERT INTO local_db.new_events_tmp BY NAME
                               SELECT '${streamPath}' as stream, *
                               FROM read_json(${JSON.stringify(files)});`)
         console.log('Loaded', files.length, 'files into new_events_tmp')
         await connection.run('BEGIN TRANSACTION;')
-        await connection.runAndReadAll(`
+        await connection.run(`
             INSERT INTO events BY NAME
             (FROM local_db.new_events_tmp
              WHERE event.timepoint > (SELECT MAX(event.timepoint) FROM events WHERE stream = '${streamPath}')
                 );`)
         console.log('Loaded', files.length, 'files into main events table')
-
+        //TODO: partitioning tables by stream would probably improve parquet efficiency of handling timepoint, and reduce filtering everywhere by stream=stream.
+        await connection.run(`
+        WITH new_events AS (SELECT * FROM events WHERE stream = '${streamPath}' AND event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot WHERE stream = '${streamPath}') ORDER BY event.timepoint ASC),  
+            latest AS (SELECT resource_uri, MAX(event.timepoint) as max_timepoint FROM new_events GROUP BY resource_uri),
+             deduped AS (SELECT e.* FROM new_events e JOIN latest ON e.event.timepoint = latest.max_timepoint ORDER BY e.event.timepoint ASC)
+        MERGE INTO snapshot
+        USING (SELECT * FROM deduped e WHERE e.event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot WHERE stream = '${streamPath}'))
+        USING (resource_uri)
+          WHEN NOT MATCHED THEN INSERT BY NAME
+            WHEN MATCHED THEN UPDATE;
+        `)
+        console.log('Merged snapshot table')
 
         await connection.run(`INSERT INTO cc_metadata.loaded_files
                               VALUES ${files.map(f => `('${f}')`).join(',')};`)
