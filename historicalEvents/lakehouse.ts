@@ -5,7 +5,7 @@ import {DuckDBConnection, DuckDBInstance} from "@duckdb/node-api";
 import {randomUUIDv7, S3Client} from "bun";
 import {tmpdir} from 'node:os'
 import {streams} from "./utils.js";
-
+const getSchema = (streamPath:string) => streamPath.replaceAll(/[^a-z0-9_]/gi, '_')
 async function setupLakehouseConnection() {
 
     const tmpDbFilepath = tmpdir() + `/${randomUUIDv7()}_catalogue.ducklake`
@@ -24,7 +24,7 @@ CREATE SECRET s3_sink (
     SECRET '${process.env.S3_SECRET_ACCESS_KEY}',
     REGION '${process.env.S3_REGION}',
     ENDPOINT '${new URL(process.env.S3_ENDPOINT ?? '').host}',
-    SCOPE 's3://companies-stream-sink'
+    SCOPE 's3://${process.env.SINK_BUCKET}'
 );
 
 CREATE SECRET s3_lake (
@@ -33,13 +33,13 @@ CREATE SECRET s3_lake (
     SECRET '${process.env.S3_SECRET_ACCESS_KEY}',
     REGION '${process.env.S3_REGION}',
     ENDPOINT '${new URL(process.env.S3_ENDPOINT ?? '').host}',
-    SCOPE 's3://companies-stream-lake'
+    SCOPE 's3://${process.env.LAKE_BUCKET}'
 );
 
 CREATE SECRET lakehouse (
     TYPE ducklake,
     METADATA_PATH '${tempDbFile.name}',
-    DATA_PATH 's3://companies-stream-lake/'
+    DATA_PATH 's3://${process.env.LAKE_BUCKET}/'
 );
 ATTACH '${tmpDuckdbFilepath}' AS local_db;
 `)
@@ -72,7 +72,7 @@ async function saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePat
     console.log('uploaded lakehouse catalogue back to', remoteCataloguePath)
 }
 
-const lakeBucket = new S3Client({bucket: 'companies-stream-lake'})
+const lakeBucket = new S3Client({bucket: `${process.env.LAKE_BUCKET}`})
 
 async function main(streamPath: string) {
     if (!streams.includes(streamPath)) {
@@ -81,22 +81,23 @@ async function main(streamPath: string) {
     }
     console.log('Loading', streamPath, 'into lakehouse')
     const {connection, tempDbFile, remoteCataloguePath} = await setupLakehouseConnection()
+    await connection.run(`CREATE SCHEMA IF NOT EXISTS lakehouse.${getSchema(streamPath)};`)
+    await connection.run(`USE lakehouse.${getSchema(streamPath)};`)
 
     const tablesRes = await connection.runAndReadAll(`SHOW TABLES;`)
     const tables = tablesRes.getRowObjects().map(r => r.name as string)
     console.log('tables in lakehouse', tables)
 
     await connection.run(`
-        CREATE TABLE IF NOT EXISTS events
+        CREATE TABLE IF NOT EXISTS lakehouse.${getSchema(streamPath)}.events
         (
-            stream VARCHAR,
             resource_kind VARCHAR,
             resource_id VARCHAR,
             resource_uri VARCHAR,
             "data" JSON,
             "event" STRUCT(timepoint BIGINT, published_at VARCHAR, "type" VARCHAR)
         );
-        CREATE TABLE IF NOT EXISTS snapshot AS FROM events WITH NO DATA;
+        CREATE TABLE IF NOT EXISTS lakehouse.${getSchema(streamPath)}.snapshot AS FROM events WITH NO DATA;
     `)
 
     await connection.run(`CREATE SCHEMA IF NOT EXISTS cc_metadata;`)
@@ -121,23 +122,22 @@ async function main(streamPath: string) {
         //TODO: can we do away with the temporary table? it will consume disk space for big files.
         await connection.run(`CREATE OR REPLACE TABLE local_db.new_events_tmp AS FROM events WITH NO DATA;`)
         await connection.run(`INSERT INTO local_db.new_events_tmp BY NAME
-                              SELECT '${streamPath}' as stream, *
+                              SELECT *
                               FROM read_json(${JSON.stringify(files)});`)
         console.log('Loaded', files.length, 'files into new_events_tmp')
         await connection.run('BEGIN TRANSACTION;')
         await connection.run(`
             INSERT INTO events BY NAME
             (FROM local_db.new_events_tmp
-             WHERE event.timepoint > (SELECT MAX(event.timepoint) FROM events WHERE stream = '${streamPath}')
+             WHERE event.timepoint > (SELECT MAX(event.timepoint) FROM events)
                 );`)
         console.log('Loaded', files.length, 'files into main events table')
-        //TODO: partitioning tables by stream would probably improve parquet efficiency of handling timepoint, and reduce filtering everywhere by stream=stream.
         await connection.run(`
-        WITH new_events AS (SELECT * FROM events WHERE stream = '${streamPath}' AND event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot WHERE stream = '${streamPath}') ORDER BY event.timepoint ASC),  
+        WITH new_events AS (SELECT * FROM events WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot) ORDER BY event.timepoint ASC),  
             latest AS (SELECT resource_uri, MAX(event.timepoint) as max_timepoint FROM new_events GROUP BY resource_uri),
              deduped AS (SELECT e.* FROM new_events e JOIN latest ON e.event.timepoint = latest.max_timepoint ORDER BY e.event.timepoint ASC)
         MERGE INTO snapshot
-        USING (SELECT * FROM deduped e WHERE e.event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot WHERE stream = '${streamPath}'))
+        USING (SELECT * FROM deduped e WHERE e.event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot))
         USING (resource_uri)
           WHEN NOT MATCHED THEN INSERT BY NAME
             WHEN MATCHED THEN UPDATE;
