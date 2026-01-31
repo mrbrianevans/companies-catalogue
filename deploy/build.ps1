@@ -12,6 +12,7 @@ bun build metadataSummary/summarise.ts --target=bun --outfile bin/metadataSummar
 bun build eventCapture/captureStream.ts --target=bun --outfile bin/captureStream.ts
 
 bun build historicalEvents/server.ts --target=bun --outfile bin/serveEvents.ts  --external @duckdb/node-bindings*
+bun build historicalEvents/lakehouse.ts --target=bun --outfile bin/lakehouse.ts  --external @duckdb/node-bindings*
 
 Set-Location saveFiles
 $env:CGO_ENABLED=0;
