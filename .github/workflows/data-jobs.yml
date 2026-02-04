@@ -3,9 +3,11 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
+  pull_request: # temp
 
 env:
   SINK_BUCKET: ${{ secrets.SINK_BUCKET || vars.SINK_BUCKET }}
+  LAKE_BUCKET: ${{ secrets.LAKE_BUCKET || vars.LAKE_BUCKET }}
   S3_ENDPOINT: ${{ secrets.S3_ENDPOINT || vars.S3_ENDPOINT }}
   S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
   S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
@@ -42,4 +44,31 @@ jobs:
       - run: bun captureStream.ts disqualified-officers
 
 
-  # TODO: new job in historicalEvents workdir to load lake house. depends on capture job
+  load-lakehouse:
+    name: Load lakehouse
+    runs-on: ubuntu-latest
+    needs: capture-streams
+
+    defaults:
+      run:
+        working-directory: historicalEvents
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Use Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - run: bun lakehouse.ts charges
+      - run: bun lakehouse.ts officers
+      - run: bun lakehouse.ts persons-with-significant-control
+      - run: bun lakehouse.ts persons-with-significant-control-statements
+      - run: bun lakehouse.ts filings
+      - run: bun lakehouse.ts companies
+      - run: bun lakehouse.ts insolvency-cases
+      - run: bun lakehouse.ts company-exemptions
+      - run: bun lakehouse.ts disqualified-officers
