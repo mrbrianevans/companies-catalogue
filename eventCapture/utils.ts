@@ -140,6 +140,7 @@ export async function getLastSavedTimepoint(outputDir: string) {
         .sort()
 
     if (jsonFiles.length === 0) {
+        //TODO: download latest file from S3
         return undefined
     }
 
