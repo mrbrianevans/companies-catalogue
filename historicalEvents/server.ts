@@ -11,6 +11,7 @@ setInterval(()=>
 
 const server = Bun.serve({
     port:3000,
+    hostname: '10.106.0.5', // only accessible via private IP
     routes: {
         // This allows consumers to check what a valid range of timepoint to request is.
         '/:path/timepoint': async (request)=>{
