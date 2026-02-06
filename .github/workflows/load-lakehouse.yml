@@ -14,10 +14,11 @@ env:
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
   STREAM_KEY: ${{ secrets.STREAM_KEY }}
 
+concurrency: lakehouse
+
 jobs:
 
   load-lakehouse:
-    concurrency: lakehouse
     name: Load lakehouse
     runs-on: ubuntu-latest
 
@@ -26,6 +27,7 @@ jobs:
         working-directory: historicalEvents
 
     strategy:
+      max-parallel: 1
       matrix:
         stream: ['charges', 'officers', 'persons-with-significant-control', 'persons-with-significant-control-statements', 'filings', 'companies', 'insolvency-cases', 'company-exemptions', 'disqualified-officers']
 
