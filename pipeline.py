@@ -166,35 +166,10 @@ def save_files_op(context, summary_path: str, output_dir: str = str(DEFAULT_OUTP
     subprocess.run(cmd, check=True, cwd=str(PROJECT_ROOT), env=env)
 
 
-@op(
-    ins={"stream_name": In(str)},
-    out=Out(Nothing),
-    tags={"stage": "captureStream"},
-)
-def capture_stream(context, stream_name: str, output_dir: str = str(DEFAULT_OUTPUT_DIR)) -> None:
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    env = _build_subprocess_env()
-    cmd = ["bun", "./bin/captureStream.ts", str(stream_name), str(out_dir)]
-    context.log.info(f"Running captureStream: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True, cwd=str(PROJECT_ROOT), env=env)
-
-
-streams = ['companies', 'filings', 'officers', 'persons-with-significant-control', 'charges', 'insolvency-cases', 'disqualified-officers', 'company-exemptions', 'persons-with-significant-control-statements']
-
-
-@op(out=DynamicOut())
-def start_capture():
-    for stream in streams:
-        yield DynamicOutput(stream, mapping_key=stream.replace("-", "_"))
-
-
 @job
 def companies_catalogue_job():
     summary = metadata_summary_op(crawler_op())
     save_files_op(summary)
-
-    start_capture().map(capture_stream)
 
 
 @schedule(cron_schedule="0 5 * * *", job=companies_catalogue_job, execution_timezone="Europe/London")
@@ -202,35 +177,6 @@ def daily_5am_schedule(_context):
     return {}
 
 
-@op
-def stream_data_lakehouse(context, stream_name: str):
-    # The goal is to convert the zipped json files into parquet files.
-    # The path of the parquet should be /stream=officers/min_123_max_456.parquet
-    # Only the envelope should have a schema (resource_uri etc). event.data should be a JSON data type.
-    # Each file should contain exactly a million events.
-    
-    # The bit I'm not sure on is how to know which JSON files to read in the batch job.
-    # We don't want to read all historical files to do this.
-    # Initial ideas are to base it on the last timestamp in the lake, and filter files by the UUIDv7 timestamp of that last event.
-    # Or we could read the first line of every file and filter ones which are before the "million" we're currently processing.
-    # Reading the first line doesn't seem particularly efficient. Duckdb sent 7 requests in my test.
-    # Could we store the last file that was converted? And only go from there.
-    env = _build_subprocess_env()
-    cmd = ["bun", "./bin/lakehouse.ts", str(stream_name)]
-    context.log.info(f"Moving data to lakehouse: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True, cwd=str(PROJECT_ROOT), env=env)
-
-
-@job
-def stream_data_lakehouse_job():
-    start_capture().map(stream_data_lakehouse)
-
-# currently runs an hour after the capture job starts. could make it depend on that job.
-@schedule(cron_schedule="0 6 * * *", job=stream_data_lakehouse_job, execution_timezone="Europe/London")
-def lakehouse_schedule(_context):
-    return {}
-
-
 @repository
 def companies_catalogue_repo():
-    return [companies_catalogue_job, daily_5am_schedule, lakehouse_schedule, stream_data_lakehouse_job]
+    return [companies_catalogue_job, daily_5am_schedule]
