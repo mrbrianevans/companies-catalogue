@@ -114,30 +114,42 @@ async function main(streamPath: string) {
     `)
 
     const allFiles = res.getRowObjects().map(f => f.file as string)
-    const files = allFiles.slice(0, 4)
+    const files = allFiles.slice(0, 1)
 
+    await connection.run('BEGIN TRANSACTION;')
     if (files.length) {
-        console.log('Loading', files.length, 'of', allFiles.length,'files into lakehouse', files)
+        console.log('Loading', files.length, 'of', allFiles.length, 'files into lakehouse', files)
 
-        await connection.run('BEGIN TRANSACTION;')
         console.time('load events')
         await connection.run(`
             INSERT INTO events BY NAME
-            (FROM read_json(${JSON.stringify(files)}, columns = {
-                resource_kind: 'VARCHAR',
-                resource_id: 'VARCHAR', 
-                resource_uri: 'VARCHAR',
-                data: 'JSON',
-                event: 'STRUCT(timepoint BIGINT, published_at VARCHAR, type VARCHAR)'
-            }, auto_detect = false)
-             WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM events)
+            (FROM read_json(${JSON.stringify(files)}, columns = {resource_kind : 'VARCHAR',
+             resource_id : 'VARCHAR',
+             resource_uri : 'VARCHAR',
+             data : 'JSON',
+             event : 'STRUCT(timepoint BIGINT, published_at VARCHAR, type VARCHAR)'}, auto_detect = false)
+                WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM events)
                 );`)
         console.timeEnd('load events')
         console.log('Loaded', files.length, 'files into events table')
 
+        await connection.run(`INSERT INTO cc_metadata.loaded_files
+                              VALUES ${files.map(f => `('${f}')`).join(',')};`)
+        console.log('Updated loaded_files table with', files.length, 'new files')
+    }
+
+    console.log('Merging any unmerged events into the snapshot')
         console.time('merge snapshot')
+        const newEventsSql = `
+            SELECT * 
+            FROM events 
+            WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot) 
+            ORDER BY event.timepoint ASC 
+            -- consistent batch sizes of 10k at a time. not sure if this actually helps at all.
+            LIMIT 10_000
+        `
         await connection.run(`
-        WITH new_events AS (SELECT * FROM events WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot) ORDER BY event.timepoint ASC),  
+        WITH new_events AS (${newEventsSql}),  
             latest AS (SELECT resource_uri, MAX(event.timepoint) as max_timepoint FROM new_events GROUP BY resource_uri),
              deduped AS (SELECT e.* FROM new_events e JOIN latest ON e.event.timepoint = latest.max_timepoint ORDER BY e.event.timepoint ASC)
         MERGE INTO snapshot
@@ -148,14 +160,11 @@ async function main(streamPath: string) {
         `)
         console.timeEnd('merge snapshot')
 
-        await connection.run(`INSERT INTO cc_metadata.loaded_files
-                              VALUES ${files.map(f => `('${f}')`).join(',')};`)
-        console.log('Updated loaded_files table with', files.length, 'new files')
 
         await connection.run('COMMIT;')
 
         // await connection.run('CHECKPOINT;') // Do this once a week/month
-    }
+
     await saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePath})
 }
 
