@@ -12,6 +12,7 @@ async function setupLakehouseConnection() {
     const tempDbFile = Bun.file(tmpDbFilepath)
     const db = await DuckDBInstance.create(':memory:');
     const connection = await db.connect();
+    await connection.run("SET threads = 1;")
     await connection.run(`
 INSTALL httpfs;
 LOAD httpfs;
@@ -70,7 +71,7 @@ async function saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePat
     console.log('uploaded lakehouse catalogue back to', remoteCataloguePath)
 }
 
-const lakeBucket = new S3Client({bucket: `${process.env.LAKE_BUCKET}`})
+const lakeBucket = new S3Client({bucket: process.env.LAKE_BUCKET})
 
 async function main(streamPath: string) {
     if (!streams.includes(streamPath)) {
@@ -113,7 +114,7 @@ async function main(streamPath: string) {
     `)
 
     const allFiles = res.getRowObjects().map(f => f.file as string)
-    const files = allFiles.slice(0, 2)
+    const files = allFiles.slice(0, 4)
 
     if (files.length) {
         console.log('Loading', files.length, 'of', allFiles.length,'files into lakehouse', files)
@@ -132,7 +133,7 @@ async function main(streamPath: string) {
              WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM events)
                 );`)
         console.timeEnd('load events')
-        console.log('Loaded', files.length, 'files into main events table')
+        console.log('Loaded', files.length, 'files into events table')
 
         console.time('merge snapshot')
         await connection.run(`

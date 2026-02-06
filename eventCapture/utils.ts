@@ -1,11 +1,11 @@
 import {open, stat} from 'fs/promises';
 import {basename} from "node:path";
 import {S3Client} from "bun";
-import {createReadStream, existsSync} from "node:fs";
+import {createReadStream, createWriteStream, existsSync} from "node:fs";
 import {get, RequestOptions} from "https";
 import {readdir} from "node:fs/promises";
 import {pipeline} from "node:stream/promises";
-import {createGzip} from "node:zlib";
+import {createGunzip, createGzip} from "node:zlib";
 
 export async function getLastJsonLine(filePath: string): Promise<Record<string, any> | undefined> {
     if (!existsSync(filePath)) return undefined;
@@ -132,16 +132,28 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
     return responseStream
 }
 
-export async function getLastSavedTimepoint(outputDir: string) {
+export async function getLastSavedTimepoint(outputDir: string,streamName:string) {
     const files = await readdir(outputDir)
     // Filter for .json files and sort by timestamp (filename is the timestamp)
-    const jsonFiles = files
+    let jsonFiles = files
         .filter(f => f.endsWith('.json'))
         .sort()
 
     if (jsonFiles.length === 0) {
-        //TODO: download latest file from S3
-        return undefined
+        console.log('No local files found. Downloading latest file from S3')
+        // download latest file from S3
+        const files = await client.list({prefix: streamName, maxKeys: 1000})
+        const len = files.keyCount?? files.contents?.length ?? 0
+        // TODO: add pagination
+        if((len) > 999) throw new Error('Too many files in S3 bucket. Add pagination to list files')
+        const sortedKeys = files.contents?.map(k=>k.key).sort() ?? []
+        if(!sortedKeys.length) throw new Error('No files in S3 bucket')
+        const lastFile = sortedKeys.at(-1)!
+        console.log('Downloading latest S3 file:', lastFile)
+        const fileRef = client.file(lastFile)
+        const filename = lastFile.split('/').at(-1)!.replace('.gz','')
+        await pipeline(fileRef.stream(), createGunzip(), createWriteStream(`${outputDir}/${filename}`))
+        jsonFiles = [filename]
     }
 
     const lastFile = `${outputDir}/${jsonFiles.at(-1)}`

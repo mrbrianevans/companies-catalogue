@@ -47,7 +47,7 @@ await cleanupOldFiles(outputDir,streamName)
 
 async function captureStream() {
     try {
-        const lastTimepoint = await getLastSavedTimepoint(outputDir)
+        const lastTimepoint = await getLastSavedTimepoint(outputDir,streamName)
         const pickUpFrom = lastTimepoint ? lastTimepoint + 1 : undefined
         const incomingStream = await streamFromCh(streamName, pickUpFrom)
         const outputName = `${outputDir}/${randomUUIDv7()}.json`
