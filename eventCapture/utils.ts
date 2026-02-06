@@ -146,7 +146,7 @@ export async function getLastSavedTimepoint(outputDir: string, streamName: strin
     // TODO: add pagination
     if ((len) > 999) throw new Error('Too many files in S3 bucket. Add pagination to list files')
     const sortedKeys = files.contents?.map(k => k.key).sort() ?? []
-    if (!sortedKeys.length) throw new Error('No files in S3 bucket')
+    if (!sortedKeys.length) throw new Error('No files in S3 bucket') // this could just return undefined to allow starting from scratch
     const lastS3File = sortedKeys.at(-1)!
 
     const filename = lastS3File.split('/').at(-1)!.replace('.gz', '')

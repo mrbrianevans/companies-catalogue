@@ -3,6 +3,7 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
+  pull_request:
 
 env:
   SINK_BUCKET: ${{ secrets.SINK_BUCKET || vars.SINK_BUCKET }}
