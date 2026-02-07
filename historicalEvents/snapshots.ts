@@ -61,8 +61,8 @@ async function main(streamPath: string) {
         })))
     }
 
-    // vortex experiment
-    if (platform() !== 'win32') {
+    // vortex experiment. disabled for now.
+    if (platform() !== 'win32' && false) {
         console.time('export vortex')
         const filesRes = await connection.runAndReadAll(`
         INSTALL vortex;
