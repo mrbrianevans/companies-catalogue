@@ -1,54 +1,12 @@
 // Export snapshots from the datalake for convenient download
 
-import {DuckDBConnection, DuckDBInstance} from "@duckdb/node-api";
-import {randomUUIDv7, S3Client} from "bun";
-import {tmpdir} from 'node:os'
 import {streams} from "./utils.js";
+import {setupLakehouseConnection} from "./connection.js";
+import {platform} from "node:os";
+
 const getSchema = (streamPath:string) => streamPath.replaceAll(/[^a-z0-9_]/gi, '_')
-async function setupLakehouseConnection() {
 
-    const tmpDbFilepath = tmpdir() + `/${randomUUIDv7()}_catalogue.ducklake`
-    const tempDbFile = Bun.file(tmpDbFilepath)
-    const db = await DuckDBInstance.create(':memory:');
-    const connection = await db.connect();
-    await connection.run("SET threads = 1;")
-    await connection.run(`
-INSTALL httpfs;
-LOAD httpfs;
-INSTALL ducklake;
-
-CREATE SECRET s3_lake (
-    TYPE s3,
-    KEY_ID '${process.env.S3_ACCESS_KEY_ID}',
-    SECRET '${process.env.S3_SECRET_ACCESS_KEY}',
-    REGION '${process.env.S3_REGION}',
-    ENDPOINT '${new URL(process.env.S3_ENDPOINT ?? '').host}',
-    SCOPE 's3://${process.env.LAKE_BUCKET}'
-);
-
-CREATE SECRET lakehouse (
-    TYPE ducklake,
-    METADATA_PATH '${tempDbFile.name}',
-    DATA_PATH 's3://${process.env.LAKE_BUCKET}/'
-);
-`)
-
-    const remoteCataloguePath = 'catalogue.ducklake'
-    const catalogueDbFile = lakeBucket.file(remoteCataloguePath)
-    if (await catalogueDbFile.exists()) {
-        await tempDbFile.write(await catalogueDbFile.bytes())
-        console.log('downloaded lakehouse catalogue to', tempDbFile.name)
-    } else {
-        console.log('no lakehouse catalogue found, creating one.')
-    }
-
-    await connection.run(`ATTACH 'ducklake:lakehouse' AS lakehouse (CREATE_IF_NOT_EXISTS true);`)
-    await connection.run(`USE lakehouse;`)
-    return {connection, tempDbFile, remoteCataloguePath}
-}
-
-
-const lakeBucket = new S3Client({bucket: process.env.LAKE_BUCKET})
+const snapshotBucket = process.env.SNAPSHOT_BUCKET
 
 async function main(streamPath: string) {
     if (!streams.includes(streamPath)) {
@@ -56,7 +14,10 @@ async function main(streamPath: string) {
         return
     }
     console.log('Exporting', streamPath, 'snapshots')
-    const {connection, tempDbFile, remoteCataloguePath} = await setupLakehouseConnection()
+    console.time('setup local catalogue')
+    const {connection} = await setupLakehouseConnection()
+    console.timeEnd('setup local catalogue')
+
     await connection.run(`USE lakehouse.${getSchema(streamPath)};`)
 
     const tablesRes = await connection.runAndReadAll(`SHOW TABLES;`)
@@ -73,23 +34,61 @@ async function main(streamPath: string) {
     `)
     console.timeEnd('create local snapshot from lakehouse')
 
-    // export local snapshot to various formats on S3
-    console.time('export json')
-    await connection.run(`
-    COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
-    TO 'exports/${streamPath}.json'
-    (FORMAT json, COMPRESSION none, ARRAY false, PRESERVE_ORDER true);
-    `)
-    console.timeEnd('export json')
+    await connection.run(`SET preserve_insertion_order = true;`)
 
+    // export local snapshot to various formats on S3
+    const compressionTypes = [{type:'none', extension: ''}, {type:'gzip', extension: '.gz'}, {type:'zstd', extension: '.zst'}]
+
+    for(const compressionType of compressionTypes) {
+        console.time('export json'+compressionType.extension)
+        await connection.run(`
+        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+        TO 's3://${snapshotBucket}/${streamPath}.json${compressionType.extension}'
+        (FORMAT json, COMPRESSION ${compressionType.type}, ARRAY false, PRESERVE_ORDER true);
+        `)
+        console.timeEnd('export json'+compressionType.extension)
+
+        console.time('export csv'+compressionType.extension)
+        await connection.run(`
+        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+        TO 's3://${snapshotBucket}/${streamPath}.csv${compressionType.extension}'
+        (FORMAT csv, COMPRESSION ${compressionType.type}, PRESERVE_ORDER true, HEADER true);
+        `)
+        console.timeEnd('export csv'+compressionType.extension)
+
+        console.time('export tsv'+compressionType.extension)
+        await connection.run(`
+        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+        TO 's3://${snapshotBucket}/${streamPath}.tsv${compressionType.extension}'
+        (FORMAT csv, COMPRESSION ${compressionType.type}, PRESERVE_ORDER true, HEADER true, DELIMITER '\t');
+        `)
+        console.timeEnd('export tsv'+compressionType.extension)
+    }
+        console.time('export parquet')
+        await connection.run(`
+        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+        TO 's3://${snapshotBucket}/${streamPath}.parquet'
+        (FORMAT parquet, PRESERVE_ORDER true);
+        `)
+    console.timeEnd('export parquet')
+
+    if (platform() !== 'win32') {
+        console.time('export vortex')
+        await connection.run(`
+        INSTALL vortex;
+        LOAD vortex;
+        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+        TO 's3://${snapshotBucket}/${streamPath}.vortex'
+        (FORMAT vortex, PRESERVE_ORDER true);
+        `)
+        console.timeEnd('export vortex')
+    }
     /*
     TODO:
-     - output parquet and vortex
      - use mongodb to output csv with nested headers
      - output split versions of each format, with 500k items per file
      - change output path to an s3 bucket
      - output a sample of each file format USING SAMPLE 1000
-     - use each compression type of none, gzip, zst and zipfs.
      - add a json manifest to the root dir of bucket with list of files
      - could use variables and prepared statements to reduce repetition?
      */
