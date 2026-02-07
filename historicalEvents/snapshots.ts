@@ -4,7 +4,7 @@ import {streams} from "./utils.js";
 import {setupLakehouseConnection} from "./connection.js";
 import {platform} from "node:os";
 
-const getSchema = (streamPath:string) => streamPath.replaceAll(/[^a-z0-9_]/gi, '_')
+const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, '_')
 
 const snapshotBucket = process.env.SNAPSHOT_BUCKET
 
@@ -37,79 +37,61 @@ async function main(streamPath: string) {
     await connection.run(`SET preserve_insertion_order = true;`)
 
     // export local snapshot to various formats on S3
-    const compressionTypes = [{type:'none', extension: ''}, {type:'gzip', extension: '.gz'}, {type:'zstd', extension: '.zst'}]
+    const fileTypes = [{format: 'json', compression: 'none', extension: '.json'}, {
+        format: 'parquet', compression: 'snappy', extension: '.parquet'
+    }, {format: 'json', compression: 'gzip', extension: '.json.gz'}, {
+        format: 'json', compression: 'zstd', extension: '.json.zst'
+    }]
 
-    oneFile: {
-        for (const compressionType of compressionTypes) {
-            console.time('export json' + compressionType.extension)
-            await connection.run(`
-        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
-        TO 's3://${snapshotBucket}/${streamPath}.json${compressionType.extension}'
-        (FORMAT json, COMPRESSION ${compressionType.type}, ARRAY false, PRESERVE_ORDER true);
-        `)
-            console.timeEnd('export json' + compressionType.extension)
-        }
-        console.time('export parquet')
+
+    //one file
+    for (const file of fileTypes) {
+        console.time('export ' + file.extension)
         await connection.run(`
-    COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
-    TO 's3://${snapshotBucket}/${streamPath}.parquet'
-    (FORMAT parquet, PRESERVE_ORDER true);
-    `)
-        console.timeEnd('export parquet')
+        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+        TO 's3://${snapshotBucket}/${streamPath}${file.extension}'
+        (FORMAT ${file.format}, COMPRESSION ${file.compression});
+        `)
+        console.timeEnd('export ' + file.extension)
+    }
 
-        if (platform() !== 'win32') {
-            console.time('export vortex')
-            await connection.run(`
+    // vortex experiment
+    if (platform() !== 'win32') {
+        console.time('export vortex')
+        await connection.run(`
         INSTALL vortex;
         LOAD vortex;
         COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
         TO 's3://${snapshotBucket}/${streamPath}.vortex'
-        (FORMAT vortex, PRESERVE_ORDER true);
+        (FORMAT vortex);
         `)
-            console.timeEnd('export vortex')
-        }
+        console.timeEnd('export vortex')
     }
 
-    splitFiles: {
-        const fileSizeBytes = 512 * 1024 * 1024
-        const formats = ['json', 'parquet']
-        for (const compressionType of compressionTypes) {
-            console.time('export split json' + compressionType.extension)
-            await connection.run(`
+// split files
+    const fileSizeBytes = 512 * 1024 * 1024
+    for (const f of fileTypes) {
+        console.time('export split ' + f.extension)
+        await connection.run(`
             COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
             TO 's3://${snapshotBucket}/split/${streamPath}'
-            (FORMAT json, OVERWRITE_OR_IGNORE true, COMPRESSION ${compressionType.type}, ARRAY false, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}');
+            (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}');
             `)
-            console.timeEnd('export split json' + compressionType.extension)
-        }
-        console.time('export split parquet')
-        await connection.run(`
-        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
-        TO 's3://${snapshotBucket}/split/${streamPath}'
-        (FORMAT parquet, OVERWRITE_OR_IGNORE true, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}');
-        `)
-        console.timeEnd('export split parquet')
-
+        console.timeEnd('export split ' + f.extension)
     }
 
-    sample: {
-        for (const compressionType of compressionTypes) {
-            console.time('export sample json' + compressionType.extension)
-            await connection.run(`
+
+    //sample of 1000 items
+    for (const f of fileTypes) {
+        console.time('export sample ' + f.extension)
+        await connection.run(`
             COPY (FROM local.${getSchema(streamPath)}.snapshot USING SAMPLE 1000) 
-            TO 's3://${snapshotBucket}/sample/${streamPath}.json${compressionType.extension}'
-            (FORMAT json, COMPRESSION ${compressionType.type}, ARRAY false);
+            TO 's3://${snapshotBucket}/sample/${streamPath}${f.extension}'
+            (FORMAT ${f.format}, COMPRESSION ${f.compression});
             `)
-            console.timeEnd('export sample json' + compressionType.extension)
-        }
-        console.time('export parquet sample')
-        await connection.run(`
-        COPY (FROM local.${getSchema(streamPath)}.snapshot USING SAMPLE 1000) 
-        TO 's3://${snapshotBucket}/sample/${streamPath}.parquet'
-        (FORMAT parquet);
-        `)
-        console.timeEnd('export parquet sample')
+        console.timeEnd('export sample ' + f.extension)
     }
+
 
     /*
     TODO:
@@ -123,7 +105,7 @@ async function main(streamPath: string) {
      - Avro
      - Zip archive compression
      */
- connection.closeSync()
+    connection.closeSync()
 }
 
 await main(process.argv[2])
