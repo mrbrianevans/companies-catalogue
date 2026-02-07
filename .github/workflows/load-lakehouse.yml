@@ -1,7 +1,5 @@
 name: Load lakehouse events only
 on:
-  schedule:
-    - cron: '0 */4 * * *'
   workflow_dispatch:
 
 env:
