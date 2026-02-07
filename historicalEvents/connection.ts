@@ -55,17 +55,22 @@ CREATE SECRET lakehouse (
     return {connection, tempDbFile, remoteCataloguePath}
 }
 
-export async function saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePath}: {
+export async function saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePath, detach = true}: {
     connection: DuckDBConnection,
     tempDbFile: Bun.BunFile,
-    remoteCataloguePath: string
+    remoteCataloguePath: string,
+    detach?: boolean
 }) {
-    await connection.run(`
+    if(detach) {
+        await connection.run(`
     ATTACH ':memory:' AS memory_db;
     USE memory_db;
     `)
-    await connection.run('DETACH lakehouse;')
+        await connection.run('DETACH lakehouse;')
+    }
+
     await lakeBucket.write(remoteCataloguePath, tempDbFile)
     console.log('uploaded lakehouse catalogue back to', remoteCataloguePath)
-    await tempDbFile.delete()
+
+    if(detach) await tempDbFile.delete()
 }

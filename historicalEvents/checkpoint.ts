@@ -20,7 +20,7 @@ async function main() {
     console.timeEnd('non-destructive operations')
 
     // save catalogue
-    await saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePath})
+    await saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePath, detach: false})
 
     // at this point, the old files are not referenced by ducklake at all.
     // the S3 version of the catalogue references rewritten files not scheduled for deletion.
@@ -40,7 +40,7 @@ async function main() {
     console.timeEnd('destructive operations')
 
     // save catalogue again. less important this time.
-    await saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePath})
+    await saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePath, detach: true})
 }
 
 await main()
