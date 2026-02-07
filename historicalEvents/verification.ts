@@ -4,13 +4,18 @@ import {setupLakehouseConnection} from "./connection.js";
 import {streams} from "./utils.js";
 const getSchema = (streamPath:string) => streamPath.replaceAll(/[^a-z0-9_]/gi, '_')
 
+// only start testing from this point onwards since there was a data issue before hand
+const startingTimepoints: Record<string,number> = {
+    officers: 36300854
+}
 
 async function main(streamPath: string) {
     if (!streams.includes(streamPath)) {
         console.log('stream', streamPath, 'not in streams list, skipping')
         return
     }
-    console.log('Testing data-verification', streamPath)
+    const startingTimepoint = startingTimepoints[streamPath]??0
+    console.log('Testing data-verification', streamPath,'from timepoint', startingTimepoint)
     const {connection} = await setupLakehouseConnection()
     await connection.run(`USE lakehouse.${getSchema(streamPath)};`)
 
@@ -24,7 +29,8 @@ async function main(streamPath: string) {
         SELECT COUNT(*) as count,
                COUNT(DISTINCT event.timepoint) as distinct_timepoints,
                MAX(event.timepoint) - MIN(event.timepoint) + 1 as diff_timepoints
-        FROM events;
+        FROM events
+        WHERE event.timepoint >= ${startingTimepoint};
     `)
 
     const lakehouseTimepoints = lakehouseTimepointRes.getRowObjects()[0]
@@ -40,7 +46,8 @@ async function main(streamPath: string) {
     const lakehousePublishedAtRes = await connection.runAndReadAll(`
         SELECT MIN(event.published_at) as min_published_at, 
                MAX(event.published_at) as max_published_at
-        FROM events;
+        FROM events
+        WHERE event.timepoint >= ${startingTimepoint};
     `)
     const lakehousePublishedAtRow = lakehousePublishedAtRes.getRowObjects()[0]
     const latestEvent = new Date(String(lakehousePublishedAtRow.max_published_at))

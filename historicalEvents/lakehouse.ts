@@ -40,6 +40,7 @@ async function main(streamPath: string) {
                           )`)
     // find files in S3 that aren't loaded
     console.log('Finding files to load')
+    // instead of doing WHERE file not in loaded_files, rather do WHERE file > (select max in loaded_files) to only get newer ones
     const res = await connection.runAndReadAll(`
         SELECT file
         FROM glob('s3://companies-stream-sink/${streamPath}/*.json.gz')
