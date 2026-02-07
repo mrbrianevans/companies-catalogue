@@ -62,7 +62,7 @@ async function main(streamPath: string) {
              resource_uri : 'VARCHAR',
              data : 'JSON',
              event : 'STRUCT(timepoint BIGINT, published_at VARCHAR, type VARCHAR)'}, auto_detect = false)
-                WHERE event.timepoint > (SELECT COALESCE(MAX(inner_events.event.timepoint), 0) FROM events inner_events)
+                WHERE event.timepoint IS NOT NULL AND event.timepoint > (SELECT COALESCE(MAX(inner_events.event.timepoint), 0) FROM events inner_events)
                 );`)
         console.timeEnd('load events')
         console.log('Loaded', files.length, 'files into events table')
