@@ -99,7 +99,12 @@ async function main(streamPath: string) {
     }
 
     console.log('Exported files', JSON.stringify(outputFiles))
-    await Bun.s3.write(`${streamPath}-manifest.json`, JSON.stringify(outputFiles), ({bucket: snapshotBucket, type: 'application/json'}))
+    const manifest = {
+        streamPath,
+        publishedAt: new Date().toISOString(),
+        downloads: outputFiles.flatMap(f => f.files)
+    }
+    await Bun.s3.write(`${streamPath}-manifest.json`, JSON.stringify(manifest), ({bucket: snapshotBucket, type: 'application/json'}))
     console.log('Manifest uploaded to S3')
     /*
     Other formats to consider in future:
