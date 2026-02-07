@@ -1,4 +1,4 @@
-name: Load lakehouse
+name: Cleanup lakehouse
 on:
   schedule:
     - cron: '45 6 * * *'
@@ -10,7 +10,6 @@ env:
   S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
   S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
-  STREAM_KEY: ${{ secrets.STREAM_KEY }}
 
 concurrency: lakehouse
 
