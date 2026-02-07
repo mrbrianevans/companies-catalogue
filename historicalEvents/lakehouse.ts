@@ -145,15 +145,15 @@ async function main(streamPath: string) {
             FROM events 
             WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot) 
             ORDER BY event.timepoint ASC 
-            -- consistent batch sizes of 10k at a time. not sure if this actually helps at all.
-            LIMIT 10_000
+             -- at most 1 million events at a time
+            LIMIT 1000000
         `
         await connection.run(`
         WITH new_events AS (${newEventsSql}),  
             latest AS (SELECT resource_uri, MAX(event.timepoint) as max_timepoint FROM new_events GROUP BY resource_uri),
-             deduped AS (SELECT e.* FROM new_events e JOIN latest ON e.event.timepoint = latest.max_timepoint ORDER BY e.event.timepoint ASC)
+             deduped AS (SELECT e.* FROM new_events e INNER JOIN latest ON e.event.timepoint = latest.max_timepoint)
         MERGE INTO snapshot
-        USING (SELECT * FROM deduped e WHERE e.event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot))
+        USING (FROM deduped)
         USING (resource_uri)
           WHEN NOT MATCHED THEN INSERT BY NAME
             WHEN MATCHED THEN UPDATE;
