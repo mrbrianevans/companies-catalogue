@@ -39,58 +39,89 @@ async function main(streamPath: string) {
     // export local snapshot to various formats on S3
     const compressionTypes = [{type:'none', extension: ''}, {type:'gzip', extension: '.gz'}, {type:'zstd', extension: '.zst'}]
 
-    for(const compressionType of compressionTypes) {
-        console.time('export json'+compressionType.extension)
-        await connection.run(`
+    oneFile: {
+        for (const compressionType of compressionTypes) {
+            console.time('export json' + compressionType.extension)
+            await connection.run(`
         COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
         TO 's3://${snapshotBucket}/${streamPath}.json${compressionType.extension}'
         (FORMAT json, COMPRESSION ${compressionType.type}, ARRAY false, PRESERVE_ORDER true);
         `)
-        console.timeEnd('export json'+compressionType.extension)
-
-        console.time('export csv'+compressionType.extension)
-        await connection.run(`
-        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
-        TO 's3://${snapshotBucket}/${streamPath}.csv${compressionType.extension}'
-        (FORMAT csv, COMPRESSION ${compressionType.type}, PRESERVE_ORDER true, HEADER true);
-        `)
-        console.timeEnd('export csv'+compressionType.extension)
-
-        console.time('export tsv'+compressionType.extension)
-        await connection.run(`
-        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
-        TO 's3://${snapshotBucket}/${streamPath}.tsv${compressionType.extension}'
-        (FORMAT csv, COMPRESSION ${compressionType.type}, PRESERVE_ORDER true, HEADER true, DELIMITER '\t');
-        `)
-        console.timeEnd('export tsv'+compressionType.extension)
-    }
+            console.timeEnd('export json' + compressionType.extension)
+        }
         console.time('export parquet')
         await connection.run(`
-        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
-        TO 's3://${snapshotBucket}/${streamPath}.parquet'
-        (FORMAT parquet, PRESERVE_ORDER true);
-        `)
-    console.timeEnd('export parquet')
+    COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+    TO 's3://${snapshotBucket}/${streamPath}.parquet'
+    (FORMAT parquet, PRESERVE_ORDER true);
+    `)
+        console.timeEnd('export parquet')
 
-    if (platform() !== 'win32') {
-        console.time('export vortex')
-        await connection.run(`
+        if (platform() !== 'win32') {
+            console.time('export vortex')
+            await connection.run(`
         INSTALL vortex;
         LOAD vortex;
         COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
         TO 's3://${snapshotBucket}/${streamPath}.vortex'
         (FORMAT vortex, PRESERVE_ORDER true);
         `)
-        console.timeEnd('export vortex')
+            console.timeEnd('export vortex')
+        }
     }
+
+    splitFiles: {
+        const fileSizeBytes = 512 * 1024 * 1024
+        const formats = ['json', 'parquet']
+        for (const compressionType of compressionTypes) {
+            console.time('export split json' + compressionType.extension)
+            await connection.run(`
+            COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+            TO 's3://${snapshotBucket}/split/${streamPath}'
+            (FORMAT json, OVERWRITE_OR_IGNORE true, COMPRESSION ${compressionType.type}, ARRAY false, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}');
+            `)
+            console.timeEnd('export split json' + compressionType.extension)
+        }
+        console.time('export split parquet')
+        await connection.run(`
+        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+        TO 's3://${snapshotBucket}/split/${streamPath}'
+        (FORMAT parquet, OVERWRITE_OR_IGNORE true, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}');
+        `)
+        console.timeEnd('export split parquet')
+
+    }
+
+    sample: {
+        for (const compressionType of compressionTypes) {
+            console.time('export sample json' + compressionType.extension)
+            await connection.run(`
+            COPY (FROM local.${getSchema(streamPath)}.snapshot USING SAMPLE 1000) 
+            TO 's3://${snapshotBucket}/sample/${streamPath}.json${compressionType.extension}'
+            (FORMAT json, COMPRESSION ${compressionType.type}, ARRAY false);
+            `)
+            console.timeEnd('export sample json' + compressionType.extension)
+        }
+        console.time('export parquet sample')
+        await connection.run(`
+        COPY (FROM local.${getSchema(streamPath)}.snapshot USING SAMPLE 1000) 
+        TO 's3://${snapshotBucket}/sample/${streamPath}.parquet'
+        (FORMAT parquet);
+        `)
+        console.timeEnd('export parquet sample')
+    }
+
     /*
     TODO:
-     - use mongodb to output csv with nested headers
-     - output split versions of each format, with 500k items per file
      - change output path to an s3 bucket
-     - output a sample of each file format USING SAMPLE 1000
-     - add a json manifest to the root dir of bucket with list of files
+     - add a json manifest to the root dir of bucket with list of files. RETURN_FILES
      - could use variables and prepared statements to reduce repetition?
+     */
+    /*
+    Other formats to consider:
+     - CSV via MongoDB (for nested headers)
+     - Avro
+     - Zip archive compression
      */
  connection.closeSync()
 }
