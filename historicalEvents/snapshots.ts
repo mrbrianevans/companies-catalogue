@@ -38,10 +38,10 @@ async function main(streamPath: string) {
     await connection.run(`SET preserve_insertion_order = true;`)
     const outputFiles = []
     // export local snapshot to various formats on S3
-    const fileTypes = [{format: 'json', compression: 'none', extension: '.json'}, {
-        format: 'parquet', compression: 'snappy', extension: '.parquet'
-    }, {format: 'json', compression: 'gzip', extension: '.json.gz'}, {
-        format: 'json', compression: 'zstd', extension: '.json.zst'
+    const fileTypes = [{format: 'json', compression: 'none', extension: '.json', description: 'JSON'}, {
+        format: 'parquet', compression: 'snappy', extension: '.parquet', description: 'Parquet'
+    }, {format: 'json', compression: 'gzip', extension: '.json.gz', description: 'JSON (gzip)'}, {
+        format: 'json', compression: 'zstd', extension: '.json.zst', description: 'JSON (zstd)'
     }]
 
 
@@ -54,7 +54,11 @@ async function main(streamPath: string) {
         (FORMAT ${file.format}, COMPRESSION ${file.compression}, RETURN_FILES true);
         `)
         console.timeEnd('export ' + file.extension)
-        outputFiles.push(...filesRes.getRowObjects().map(f => ({files: (f.Files as DuckDBListValue).items as string[], count: Number(f.Count)})))
+        outputFiles.push(...filesRes.getRowObjects().map(fileRow => ({
+            files: (fileRow.Files as DuckDBListValue).items.map(fullName => (fullName as string).replace(`s3://${snapshotBucket}`, '')),
+            count: Number(fileRow.Count),
+            ...file
+        })))
     }
 
     // vortex experiment
@@ -68,7 +72,11 @@ async function main(streamPath: string) {
         (FORMAT vortex, RETURN_FILES true);
         `)
         console.timeEnd('export vortex')
-        outputFiles.push(...filesRes.getRowObjects().map(f => ({files: (f.Files as DuckDBListValue).items as string[], count: Number(f.Count)})))
+        outputFiles.push(...filesRes.getRowObjects().map(fileRow => ({
+            files: (fileRow.Files as DuckDBListValue).items.map(file => (file as string).replace(`s3://${snapshotBucket}`, '')),
+            count: Number(fileRow.Count),
+            format: 'vortex', compression: 'none', extension: '.vortex', description: 'Vortex'
+        })))
     }
 
 // split files
@@ -82,7 +90,11 @@ async function main(streamPath: string) {
             (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}', RETURN_FILES true);
             `)
         console.timeEnd('export split ' + f.extension)
-        outputFiles.push(...filesRes.getRowObjects().map(f => ({files: (f.Files as DuckDBListValue).items as string[], count: Number(f.Count)})))
+        outputFiles.push(...filesRes.getRowObjects().map(fileRow => ({
+            files: (fileRow.Files as DuckDBListValue).items.map(file => (file as string).replace(`s3://${snapshotBucket}`, '')),
+            count: Number(fileRow.Count),
+            ...f
+        })))
     }
 
 
@@ -95,14 +107,19 @@ async function main(streamPath: string) {
             (FORMAT ${f.format}, COMPRESSION ${f.compression}, RETURN_FILES true);
             `)
         console.timeEnd('export sample ' + f.extension)
-        outputFiles.push(...filesRes.getRowObjects().map(f => ({files: (f.Files as DuckDBListValue).items as string[], count: Number(f.Count)})))
+        outputFiles.push(...filesRes.getRowObjects().map(fileRow => ({
+            files: (fileRow.Files as DuckDBListValue).items.map(file => (file as string).replace(`s3://${snapshotBucket}`, '')),
+            count: Number(fileRow.Count),
+            ...f
+        })))
     }
 
     console.log('Exported files', JSON.stringify(outputFiles))
     const manifest = {
         streamPath,
         publishedAt: new Date().toISOString(),
-        downloads: outputFiles.flatMap(f => f.files)
+        records: Math.max(...outputFiles.map(f => f.count)),
+        downloads: outputFiles
     }
     await Bun.s3.write(`${streamPath}-manifest.json`, JSON.stringify(manifest), ({bucket: snapshotBucket, type: 'application/json'}))
     console.log('Manifest uploaded to S3')

@@ -1,8 +1,8 @@
-name: Load lakehouse events only
+name: Tests
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 * * * *' # remove this once all snapshots have caught up to the latest events
+    - cron: '0 9 * * *'
 
 env:
   SINK_BUCKET: ${{ secrets.SINK_BUCKET || vars.SINK_BUCKET }}
@@ -12,12 +12,11 @@ env:
   S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
 
-concurrency: lakehouse
 
 jobs:
 
-  load-lakehouse:
-    name: Load lakehouse
+  data-tests:
+    name: Test data integrity
     runs-on: ubuntu-latest
 
     defaults:
@@ -41,5 +40,5 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: historicalEvents
 
-      - run: bun lakehouse.ts ${{ matrix.stream }}
+      - run: bun verification.ts ${{ matrix.stream }}
         working-directory: historicalEvents
