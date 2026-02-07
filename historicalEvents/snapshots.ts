@@ -3,6 +3,7 @@
 import {streams} from "./utils.js";
 import {setupLakehouseConnection} from "./connection.js";
 import {platform} from "node:os";
+import {DuckDBListValue} from "@duckdb/node-api";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, '_')
 
@@ -35,7 +36,7 @@ async function main(streamPath: string) {
     console.timeEnd('create local snapshot from lakehouse')
 
     await connection.run(`SET preserve_insertion_order = true;`)
-
+    const outputFiles = []
     // export local snapshot to various formats on S3
     const fileTypes = [{format: 'json', compression: 'none', extension: '.json'}, {
         format: 'parquet', compression: 'snappy', extension: '.parquet'
@@ -47,62 +48,63 @@ async function main(streamPath: string) {
     //one file
     for (const file of fileTypes) {
         console.time('export ' + file.extension)
-        await connection.run(`
+        const filesRes = await connection.runAndReadAll(`
         COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
         TO 's3://${snapshotBucket}/${streamPath}${file.extension}'
-        (FORMAT ${file.format}, COMPRESSION ${file.compression});
+        (FORMAT ${file.format}, COMPRESSION ${file.compression}, RETURN_FILES true);
         `)
         console.timeEnd('export ' + file.extension)
+        outputFiles.push(...filesRes.getRowObjects().map(f => ({files: (f.Files as DuckDBListValue).items as string[], count: Number(f.Count)})))
     }
 
     // vortex experiment
     if (platform() !== 'win32') {
         console.time('export vortex')
-        await connection.run(`
+        const filesRes = await connection.runAndReadAll(`
         INSTALL vortex;
         LOAD vortex;
         COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
         TO 's3://${snapshotBucket}/${streamPath}.vortex'
-        (FORMAT vortex);
+        (FORMAT vortex, RETURN_FILES true);
         `)
         console.timeEnd('export vortex')
+        outputFiles.push(...filesRes.getRowObjects().map(f => ({files: (f.Files as DuckDBListValue).items as string[], count: Number(f.Count)})))
     }
 
 // split files
     const fileSizeBytes = 512 * 1024 * 1024
     for (const f of fileTypes) {
+        //TODO: clean out existing files from path in bucket in case snapshot size decreases and leaves an old partition. (low risk)
         console.time('export split ' + f.extension)
-        await connection.run(`
+        const filesRes = await connection.runAndReadAll(`
             COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
             TO 's3://${snapshotBucket}/split/${streamPath}'
-            (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}');
+            (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}', RETURN_FILES true);
             `)
         console.timeEnd('export split ' + f.extension)
+        outputFiles.push(...filesRes.getRowObjects().map(f => ({files: (f.Files as DuckDBListValue).items as string[], count: Number(f.Count)})))
     }
 
 
     //sample of 1000 items
     for (const f of fileTypes) {
         console.time('export sample ' + f.extension)
-        await connection.run(`
+        const filesRes = await connection.runAndReadAll(`
             COPY (FROM local.${getSchema(streamPath)}.snapshot USING SAMPLE 1000) 
             TO 's3://${snapshotBucket}/sample/${streamPath}${f.extension}'
-            (FORMAT ${f.format}, COMPRESSION ${f.compression});
+            (FORMAT ${f.format}, COMPRESSION ${f.compression}, RETURN_FILES true);
             `)
         console.timeEnd('export sample ' + f.extension)
+        outputFiles.push(...filesRes.getRowObjects().map(f => ({files: (f.Files as DuckDBListValue).items as string[], count: Number(f.Count)})))
     }
 
-
+    console.log('Exported files', JSON.stringify(outputFiles))
+    await Bun.s3.write(`${streamPath}-manifest.json`, JSON.stringify(outputFiles), ({bucket: snapshotBucket, type: 'application/json'}))
+    console.log('Manifest uploaded to S3')
     /*
-    TODO:
-     - change output path to an s3 bucket
-     - add a json manifest to the root dir of bucket with list of files. RETURN_FILES
-     - could use variables and prepared statements to reduce repetition?
-     */
-    /*
-    Other formats to consider:
+    Other formats to consider in future:
      - CSV via MongoDB (for nested headers)
-     - Avro
+     - Avro, ORC, Feather, Lance
      - Zip archive compression
      */
     connection.closeSync()
