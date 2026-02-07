@@ -48,7 +48,7 @@ async function main(streamPath: string) {
     `)
 
     const allFiles = res.getRowObjects().map(f => f.file as string)
-    const files = allFiles.slice(0, 1)
+    const files = allFiles.slice(0, 1) // if this is more than one, you need to apply DISTINCT on events before inserting.
 
     await connection.run('BEGIN TRANSACTION;')
     if (files.length) {
@@ -62,7 +62,7 @@ async function main(streamPath: string) {
              resource_uri : 'VARCHAR',
              data : 'JSON',
              event : 'STRUCT(timepoint BIGINT, published_at VARCHAR, type VARCHAR)'}, auto_detect = false)
-                WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM events)
+                WHERE event.timepoint > (SELECT COALESCE(MAX(inner_events.event.timepoint), 0) FROM events inner_events)
                 );`)
         console.timeEnd('load events')
         console.log('Loaded', files.length, 'files into events table')
