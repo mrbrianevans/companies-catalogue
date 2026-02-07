@@ -1,6 +1,8 @@
 name: Load lakehouse events only
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *' # remove this once all snapshots have caught up to the latest events
 
 env:
   SINK_BUCKET: ${{ secrets.SINK_BUCKET || vars.SINK_BUCKET }}
