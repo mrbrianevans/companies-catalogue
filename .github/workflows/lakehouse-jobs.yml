@@ -1,4 +1,4 @@
-name: Capture streams
+name: Lakehouse load jobs
 on:
   schedule:
     - cron: '0 6 * * *'
@@ -6,12 +6,15 @@ on:
 
 env:
   SINK_BUCKET: ${{ secrets.SINK_BUCKET || vars.SINK_BUCKET }}
+  SNAPSHOT_BUCKET: ${{ secrets.SINK_BUCKET || vars.SINK_BUCKET }}
   LAKE_BUCKET: ${{ secrets.LAKE_BUCKET || vars.LAKE_BUCKET }}
   S3_ENDPOINT: ${{ secrets.S3_ENDPOINT || vars.S3_ENDPOINT }}
   S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
   S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
   STREAM_KEY: ${{ secrets.STREAM_KEY }}
+
+concurrency: lakehouse
 
 jobs:
   capture-streams:
@@ -37,5 +40,17 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+        working-directory: eventCapture
 
       - run: bun captureStream.ts ${{ matrix.stream }}
+        working-directory: eventCapture
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        working-directory: historicalEvents
+
+      - run: bun lakehouse.ts ${{ matrix.stream }}
+        working-directory: historicalEvents
+
+      - run: bun snapshots.ts ${{ matrix.stream }}
+        working-directory: historicalEvents

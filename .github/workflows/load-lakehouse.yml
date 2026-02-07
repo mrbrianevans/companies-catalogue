@@ -1,4 +1,4 @@
-name: Load lakehouse
+name: Load lakehouse events only
 on:
   schedule:
     - cron: '0 */4 * * *'
@@ -40,5 +40,7 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+        working-directory: historicalEvents
 
       - run: bun lakehouse.ts ${{ matrix.stream }}
+        working-directory: historicalEvents
