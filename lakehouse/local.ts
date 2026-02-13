@@ -1,6 +1,6 @@
 // For local edits to the lakehouse. Run with care.
 
-import { saveAndCloseLakehouse, setupLakehouseConnection } from "../historicalEvents/connection.js";
+import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 
 async function main() {

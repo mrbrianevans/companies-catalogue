@@ -2,10 +2,10 @@
 // Ducklake catalog is frozen on S3.
 
 import { streams } from "./utils.js";
-import { saveAndCloseLakehouse, setupLakehouseConnection } from "../historicalEvents/connection.js";
+import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
-
+const sinkBucket = process.env.SINK_BUCKET;
 async function main(streamPath: string) {
   if (!streams.includes(streamPath)) {
     console.log("stream", streamPath, "not in streams list, skipping");
@@ -42,7 +42,7 @@ async function main(streamPath: string) {
   // instead of doing WHERE file not in loaded_files, rather do WHERE file > (select max in loaded_files) to only get newer ones
   const res = await connection.runAndReadAll(`
         SELECT file
-        FROM glob('s3://companies-stream-sink/${streamPath}/*.json.gz')
+        FROM glob('s3://${sinkBucket}/${streamPath}/*.json.gz')
         WHERE file NOT IN (SELECT file FROM cc_metadata.loaded_files)
         ORDER BY file ASC;
     `);
