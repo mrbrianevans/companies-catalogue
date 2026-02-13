@@ -14,46 +14,6 @@ env:
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
 
 jobs:
-  data-tests:
-    name: Test data integrity
-    runs-on: ubuntu-latest
-
-    strategy:
-      max-parallel: 1
-      fail-fast: false
-      matrix:
-        stream:
-          [
-            "charges",
-            "officers",
-            "persons-with-significant-control",
-            "persons-with-significant-control-statements",
-            "filings",
-            "companies",
-            "insolvency-cases",
-            "company-exemptions",
-            "disqualified-officers",
-          ]
-        branch: [master, dev]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ matrix.branch }}
-
-      - name: Use Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - run: bun verification.ts ${{ matrix.stream }}
-        working-directory: lakehouse
-        env:
-          SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
-          LAKE_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-lake' || 'dev-companies-stream-lake' }}
-
   test-sink:
     name: Test sink
     runs-on: ubuntu-latest
@@ -92,3 +52,44 @@ jobs:
         working-directory: eventCapture
         env:
           SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
+
+  test-lakehouse:
+    name: Test lakehouse
+    needs: test-sink
+    runs-on: ubuntu-latest
+
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        stream:
+          [
+            "charges",
+            "officers",
+            "persons-with-significant-control",
+            "persons-with-significant-control-statements",
+            "filings",
+            "companies",
+            "insolvency-cases",
+            "company-exemptions",
+            "disqualified-officers",
+          ]
+        branch: [master, dev]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Use Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - run: bun verification.ts ${{ matrix.stream }}
+        working-directory: lakehouse
+        env:
+          SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
+          LAKE_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-lake' || 'dev-companies-stream-lake' }}
