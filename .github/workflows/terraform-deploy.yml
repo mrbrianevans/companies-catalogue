@@ -1,0 +1,35 @@
+name: Deploy Terraform
+on:
+  push:
+    branches:
+      - master
+      - dev
+    paths:
+      - ".github/workflows/terraform-deploy.yml"
+      - "terraform/**"
+  workflow_dispatch:
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_SECRET_KEY }}
+  AWS_DEFAULT_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
+  AWS_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT || vars.S3_ENDPOINT }}
+
+jobs:
+  deploy:
+    name: Deploy ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hashicorp/setup-terraform@v3
+
+      - run: echo "Running terraform in $(pwd)"
+
+      - run: terraform init
+
+      - run: terraform plan -out=tfplan
+
+      - run: terraform apply -auto-approve tfplan
