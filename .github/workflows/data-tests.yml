@@ -2,7 +2,7 @@ name: Tests
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 9 * * *'
+    - cron: "0 9 * * *"
 
 env:
   SINK_BUCKET: ${{ secrets.SINK_BUCKET || vars.SINK_BUCKET }}
@@ -12,9 +12,7 @@ env:
   S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
 
-
 jobs:
-
   data-tests:
     name: Test data integrity
     runs-on: ubuntu-latest
@@ -27,7 +25,18 @@ jobs:
       max-parallel: 1
       fail-fast: false
       matrix:
-        stream: ['charges', 'officers', 'persons-with-significant-control', 'persons-with-significant-control-statements', 'filings', 'companies', 'insolvency-cases', 'company-exemptions', 'disqualified-officers']
+        stream:
+          [
+            "charges",
+            "officers",
+            "persons-with-significant-control",
+            "persons-with-significant-control-statements",
+            "filings",
+            "companies",
+            "insolvency-cases",
+            "company-exemptions",
+            "disqualified-officers",
+          ]
 
     steps:
       - name: Checkout repository

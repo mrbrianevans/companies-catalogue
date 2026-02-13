@@ -1,9 +1,7 @@
-
-
 ```sql
 CREATE OR REPLACE TABLE checks AS (
-SELECT filename, MIN(event.timepoint) AS min, MAX(event.timepoint) AS max, COUNT(*) as count 
-FROM 's3://companies-stream-sink/persons-with-significant-control/019aa*.json.gz' 
+SELECT filename, MIN(event.timepoint) AS min, MAX(event.timepoint) AS max, COUNT(*) as count
+FROM 's3://companies-stream-sink/persons-with-significant-control/019aa*.json.gz'
 GROUP BY filename
 );
 ```

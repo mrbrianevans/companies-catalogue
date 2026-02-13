@@ -7,4 +7,3 @@ This allows external systems to catch up on historical events further back than 
 The web server exposes the same API as the official Companies House one, albeit without any authentication.
 
 Top level paths for `/filings`, `/companies` etc with a mandatory timepoint parameter.
-

@@ -1,41 +1,42 @@
 import split2 from "split2";
 import { Readable } from "node:stream";
 
-const limit = 1_000_000
-const stream = process.argv[2] ||'persons-with-significant-control-statements'
-console.log("Testing", stream, 'stream');
+const limit = 1_000_000;
+const stream = process.argv[2] || "persons-with-significant-control-statements";
+console.log("Testing", stream, "stream");
 const timepointRes = await fetch(`https://companies.stream/${stream}/timepoint`);
-if(!timepointRes.ok) throw new Error(
-    `Failed to fetch timepoint for ${stream} stream: ${timepointRes.status} ${timepointRes.statusText}`
-)
+if (!timepointRes.ok)
+  throw new Error(
+    `Failed to fetch timepoint for ${stream} stream: ${timepointRes.status} ${timepointRes.statusText}`,
+  );
 const timepointJson = await timepointRes.json();
 
-const startTestFrom = Math.max(timepointJson.max - limit, timepointJson.min)
-console.log("Starting test from", startTestFrom, 'on', stream, 'stream');
-console.log("Timepoint range", timepointJson.min, 'to',timepointJson.max);
+const startTestFrom = Math.max(timepointJson.max - limit, timepointJson.min);
+console.log("Starting test from", startTestFrom, "on", stream, "stream");
+console.log("Timepoint range", timepointJson.min, "to", timepointJson.max);
 const url = `https://companies.stream/${stream}?timepoint=${startTestFrom}`;
 
 console.time("Stream");
 const start = Date.now();
-const ac = new AbortController()
-const {signal} = ac
-const res = await fetch(url, {signal});
+const ac = new AbortController();
+const { signal } = ac;
+const res = await fetch(url, { signal });
 console.log("Response code", res.status, res.statusText);
 
-const events = Readable.fromWeb(res.body!, {signal}).pipe(split2(),{end: true});
+const events = Readable.fromWeb(res.body!, { signal }).pipe(split2(), { end: true });
 
 let counter = 0;
 let timepointTracker = startTestFrom;
 
-let ttfb
+let ttfb;
 for await (const rawEvent of events) {
-  if(!ttfb){
+  if (!ttfb) {
     ttfb = Date.now() - start;
     console.log("Time to first byte", ttfb, "ms");
   }
   try {
     const parsedEvent = JSON.parse(rawEvent);
-    if(limit < 1000) process.stdout.write(".");
+    if (limit < 1000) process.stdout.write(".");
     if (parsedEvent.event.timepoint !== timepointTracker++) {
       process.stdout.write("-");
       timepointTracker = parsedEvent.event.timepoint + 1;
@@ -47,7 +48,7 @@ for await (const rawEvent of events) {
   counter++;
   // To test cancelling a request
   if (counter % 100 === 0) {
-    ac.abort()
+    ac.abort();
     break;
   }
   if (counter % 100_000 === 0) console.timeLog("Stream", counter);

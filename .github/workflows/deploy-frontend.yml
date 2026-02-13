@@ -2,7 +2,7 @@ name: Build and Deploy Frontend to Bucket
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   workflow_dispatch:
 
 # Required repository secrets/vars:

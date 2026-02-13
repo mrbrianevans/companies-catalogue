@@ -5,7 +5,18 @@ on:
       stream:
         required: true
         type: choice
-        options: [ 'charges', 'officers', 'persons-with-significant-control', 'persons-with-significant-control-statements', 'filings', 'companies', 'insolvency-cases', 'company-exemptions', 'disqualified-officers' ]
+        options:
+          [
+            "charges",
+            "officers",
+            "persons-with-significant-control",
+            "persons-with-significant-control-statements",
+            "filings",
+            "companies",
+            "insolvency-cases",
+            "company-exemptions",
+            "disqualified-officers",
+          ]
         description: Specify which stream to export a snapshot of
 
 env:
@@ -17,13 +28,10 @@ env:
   S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
 
-
 jobs:
-
   export-snapshots:
     name: Export ${{ inputs.stream }}
     runs-on: ubuntu-latest
-
 
     steps:
       - name: Checkout repository
