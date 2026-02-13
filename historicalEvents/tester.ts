@@ -9,7 +9,7 @@ if (!timepointRes.ok)
   throw new Error(
     `Failed to fetch timepoint for ${stream} stream: ${timepointRes.status} ${timepointRes.statusText}`,
   );
-const timepointJson = await timepointRes.json() as {min: number, max: number};
+const timepointJson = (await timepointRes.json()) as { min: number; max: number };
 
 const startTestFrom = Math.max(timepointJson.max - limit, timepointJson.min);
 console.log("Starting test from", startTestFrom, "on", stream, "stream");
@@ -43,7 +43,7 @@ for await (const rawEvent of events) {
     }
   } catch (e) {
     process.stdout.write("x");
-    console.error("Error parsing event", rawEvent,e);
+    console.error("Error parsing event", rawEvent, e);
   }
   counter++;
   // To test cancelling a request
