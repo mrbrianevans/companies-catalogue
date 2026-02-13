@@ -17,16 +17,19 @@ env:
 
 jobs:
   deploy:
+    name: Deploy ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
     steps:
       - uses: actions/checkout@v6
       - uses: hashicorp/setup-terraform@v3
 
+      - run: echo "Running terraform in $(pwd)"
+
       - run: terraform init
-        working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
 
       - run: terraform plan -out=tfplan
-        working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
 
       - run: terraform apply -auto-approve tfplan
-        working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
