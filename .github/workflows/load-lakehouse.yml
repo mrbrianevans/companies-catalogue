@@ -2,7 +2,7 @@ name: Load lakehouse events only
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 * * * *' # remove this once all snapshots have caught up to the latest events
+    - cron: "0 * * * *" # remove this once all snapshots have caught up to the latest events
 
 env:
   SINK_BUCKET: ${{ secrets.SINK_BUCKET || vars.SINK_BUCKET }}
@@ -15,20 +15,26 @@ env:
 concurrency: lakehouse
 
 jobs:
-
   load-lakehouse:
     name: Load lakehouse
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: historicalEvents
 
     strategy:
       max-parallel: 1
       fail-fast: false
       matrix:
-        stream: ['charges', 'officers', 'persons-with-significant-control', 'persons-with-significant-control-statements', 'filings', 'companies', 'insolvency-cases', 'company-exemptions', 'disqualified-officers']
+        stream:
+          [
+            "charges",
+            "officers",
+            "persons-with-significant-control",
+            "persons-with-significant-control-statements",
+            "filings",
+            "companies",
+            "insolvency-cases",
+            "company-exemptions",
+            "disqualified-officers",
+          ]
 
     steps:
       - name: Checkout repository
@@ -39,7 +45,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-        working-directory: historicalEvents
 
       - run: bun lakehouse.ts ${{ matrix.stream }}
-        working-directory: historicalEvents
+        working-directory: lakehouse

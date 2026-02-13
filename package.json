@@ -1,0 +1,23 @@
+{
+  "name": "companies-catalogue",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "oxfmt .",
+    "lint": "oxlint .",
+    "typescript": "tsc --build"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "^1.4.4-r.1",
+    "@types/split2": "^4.2.3",
+    "split2": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "oxfmt": "^0.32.0",
+    "oxlint": "^1.47.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
