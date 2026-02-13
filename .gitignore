@@ -4,3 +4,5 @@ bin
 **/node_modules
 tsconfig.tsbuildinfo
 terraform.tfvars
+.terraform
+__pycache__

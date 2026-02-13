@@ -12,12 +12,14 @@ terraform {
   }
 }
 
+
+
 module "companies_catalogue" {
-  source = "./.."
-  access_key = var.access_key
-  secret_key = var.secret_key
-  s3_region = var.s3_region
-  s3_endpoint = var.s3_endpoint
+  source        = "./.."
+  access_key    = var.access_key
+  secret_key    = var.secret_key
+  s3_region     = var.s3_region
+  s3_endpoint   = var.s3_endpoint
   bucket_prefix = "dev-"
 }
 
