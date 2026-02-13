@@ -1,8 +1,6 @@
 name: Load lakehouse events only
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 * * * *" # remove this once all snapshots have caught up to the latest events
 
 env:
   S3_ENDPOINT: ${{ secrets.S3_ENDPOINT || vars.S3_ENDPOINT }}
