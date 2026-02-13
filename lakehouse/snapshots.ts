@@ -1,7 +1,7 @@
 // Export snapshots from the datalake for convenient download
 
 import {streams} from "./utils.js";
-import {setupLakehouseConnection} from "./connection.js";
+import {setupLakehouseConnection} from "../historicalEvents/connection.js";
 import {platform} from "node:os";
 import {DuckDBListValue} from "@duckdb/node-api";
 

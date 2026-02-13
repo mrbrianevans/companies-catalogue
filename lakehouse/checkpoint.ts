@@ -1,6 +1,6 @@
 // This is to clean up the lakehouse. must not be run at the same time as other processes which modify the lakehouse.
 
-import {saveAndCloseLakehouse, setupLakehouseConnection} from "./connection.js";
+import {saveAndCloseLakehouse, setupLakehouseConnection} from "../historicalEvents/connection.js";
 
 // destructive and non-destructive operations are split, with saving the catalogue in between to avoid data loss if the last upload fails.
 

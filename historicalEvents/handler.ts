@@ -5,7 +5,7 @@ import { createGunzip } from 'node:zlib'
 import { pipeline } from "node:stream/promises";
 import { compose } from "node:stream";
 import split2 from 'split2';
-import {makeError, streams} from "./utils.js";
+import {makeError, streams} from "../lakehouse/utils";
 
 export async function handleStreamRequest(path:string, timepointInputString:string|null, abortSignal: AbortSignal):Promise<Response>{
     console.log(new Date(), 'Handling stream request for', path, timepointInputString)

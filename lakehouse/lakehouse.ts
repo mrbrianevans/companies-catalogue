@@ -2,7 +2,7 @@
 // Ducklake catalog is frozen on S3.
 
 import {streams} from "./utils.js";
-import {saveAndCloseLakehouse, setupLakehouseConnection} from "./connection.js";
+import {saveAndCloseLakehouse, setupLakehouseConnection} from "../historicalEvents/connection.js";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, '_')
 

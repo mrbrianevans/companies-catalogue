@@ -1,8 +1,8 @@
 import { handleStreamRequest} from "./handler.js";
 import { getMinMaxRange } from "./readFileIndex.js";
-import {makeError, streams} from "./utils.js";
+import {makeError, streams} from "../lakehouse/utils";
 import {updateIndex} from "./writeFileIndex.js";
-import {connection} from "./duckdbConnection.js";
+import {connection} from "../lakehouse/duckdbConnection";
 
 // set a "cron" interval in bun to refresh the index every day
 setInterval(()=>

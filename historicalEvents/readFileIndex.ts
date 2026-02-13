@@ -1,5 +1,5 @@
 import { DuckDBInstance, INTEGER, VARCHAR } from '@duckdb/node-api';
-import {connection} from "./duckdbConnection.js";
+import {connection} from "../lakehouse/duckdbConnection";
 
 // This file retrieves data from the index of files,
 // which stores the min and max timepoint of each file in S3.
