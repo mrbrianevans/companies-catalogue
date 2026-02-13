@@ -1,4 +1,4 @@
-name: Tests
+name: Data Tests
 on:
   workflow_dispatch:
   schedule:
@@ -16,10 +16,6 @@ jobs:
   data-tests:
     name: Test data integrity
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: historicalEvents
 
     strategy:
       max-parallel: 1
@@ -47,7 +43,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-        working-directory: historicalEvents
 
       - run: bun verification.ts ${{ matrix.stream }}
-        working-directory: historicalEvents
+        working-directory: lakehouse
