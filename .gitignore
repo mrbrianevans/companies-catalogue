@@ -3,4 +3,4 @@ bin
 .idea
 **/node_modules
 tsconfig.tsbuildinfo
-/terraform/terraform.tfvars
+terraform.tfvars
