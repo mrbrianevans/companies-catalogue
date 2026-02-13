@@ -5,12 +5,8 @@ on:
       - master
       - dev
     paths:
-      - ".github/workflows/terraform-validate.yml"
+      - ".github/workflows/terraform-deploy.yml"
       - "terraform/**"
-
-defaults:
-  run:
-    working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
 
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_ACCESS_KEY }}
@@ -26,4 +22,7 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
 
       - run: terraform init
+        working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
+
       - run: terraform plan
+        working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
