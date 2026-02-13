@@ -1,0 +1,16 @@
+{
+  "name": "companies-catalogue",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "^1.4.4-r.1",
+    "@types/split2": "^4.2.3",
+    "split2": "^4.2.0"
+  }
+}
