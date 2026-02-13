@@ -25,5 +25,8 @@ jobs:
       - run: terraform init
         working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
 
-      - run: terraform plan
+      - run: terraform plan -out=tfplan
+        working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
+
+      - run: terraform apply -auto-approve tfplan
         working-directory: ${{ github.ref == 'refs/heads/master' && 'terraform/prod' || 'terraform/dev' }}
