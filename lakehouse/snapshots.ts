@@ -2,7 +2,6 @@
 
 import { streams } from "./utils.js";
 import { setupLakehouseConnection } from "../historicalEvents/connection.js";
-import { platform } from "node:os";
 import { DuckDBListValue } from "@duckdb/node-api";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
@@ -71,31 +70,6 @@ async function main(streamPath: string) {
         ),
         count: Number(fileRow.Count),
         ...file,
-      })),
-    );
-  }
-
-  // vortex experiment. disabled for now.
-  if (platform() !== "win32" && false) {
-    console.time("export vortex");
-    const filesRes = await connection.runAndReadAll(`
-        INSTALL vortex;
-        LOAD vortex;
-        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
-        TO 's3://${snapshotBucket}/${streamPath}.vortex'
-        (FORMAT vortex, RETURN_FILES true);
-        `);
-    console.timeEnd("export vortex");
-    outputFiles.push(
-      ...filesRes.getRowObjects().map((fileRow) => ({
-        files: (fileRow.Files as DuckDBListValue).items.map((file) =>
-          (file as string).replace(`s3://${snapshotBucket}`, ""),
-        ),
-        count: Number(fileRow.Count),
-        format: "vortex",
-        compression: "none",
-        extension: ".vortex",
-        description: "Vortex",
       })),
     );
   }

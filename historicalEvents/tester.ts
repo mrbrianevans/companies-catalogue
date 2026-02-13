@@ -43,7 +43,7 @@ for await (const rawEvent of events) {
     }
   } catch (e) {
     process.stdout.write("x");
-    console.error("Error parsing event", rawEvent);
+    console.error("Error parsing event", rawEvent,e);
   }
   counter++;
   // To test cancelling a request

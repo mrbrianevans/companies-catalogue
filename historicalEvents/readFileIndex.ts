@@ -1,4 +1,4 @@
-import { DuckDBInstance, INTEGER, VARCHAR } from "@duckdb/node-api";
+import { INTEGER, VARCHAR } from "@duckdb/node-api";
 import { connection } from "../lakehouse/duckdbConnection";
 
 // This file retrieves data from the index of files,

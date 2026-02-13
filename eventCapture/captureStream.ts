@@ -1,4 +1,3 @@
-import { scheduler } from "node:timers/promises";
 import {
   cleanupOldFiles,
   getLastSavedTimepoint,

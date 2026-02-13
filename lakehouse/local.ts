@@ -21,7 +21,7 @@ async function main() {
   const row = res.getRowObjects()[0];
   console.log("Row count", row.count, "distinct timepoints", row.distinct_timepoints);
 
-  if (false) {
+  if (process.argv.includes("--save")) {
     await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath });
   }
 }

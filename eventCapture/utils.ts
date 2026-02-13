@@ -155,7 +155,7 @@ export async function getLastSavedTimepoint(outputDir: string, streamName: strin
   const len = files.keyCount ?? files.contents?.length ?? 0;
   // TODO: add pagination
   if (len > 999) throw new Error("Too many files in S3 bucket. Add pagination to list files");
-  const sortedKeys = files.contents?.map((k) => k.key).sort() ?? [];
+  const sortedKeys = files.contents?.map((k) => k.key).toSorted() ?? [];
   if (!sortedKeys.length) throw new Error("No files in S3 bucket"); // this could just return undefined to allow starting from scratch
   const lastS3File = sortedKeys.at(-1)!;
 
@@ -185,7 +185,7 @@ export async function cleanupOldFiles(outputDir: string, streamName: string) {
   const files = await readdir(outputDir);
   const jsonFiles = files
     .filter((f) => f.endsWith(".json"))
-    .sort()
+    .toSorted()
     .slice(0, -1); // never delete the last file
   for (const file of jsonFiles) {
     const filePath = `${outputDir}/${file}`;
@@ -209,7 +209,7 @@ export async function cleanupOldFiles(outputDir: string, streamName: string) {
 
 export async function uploadExistingFilesToS3(outputDir: string, streamName: string) {
   const files = await readdir(outputDir);
-  const jsonFiles = files.filter((f) => f.endsWith(".json")).sort();
+  const jsonFiles = files.filter((f) => f.endsWith(".json")).toSorted();
   for (const file of jsonFiles) {
     const filePath = `${outputDir}/${file}`;
     const objectPath = getS3ObjectPath(filePath, streamName);

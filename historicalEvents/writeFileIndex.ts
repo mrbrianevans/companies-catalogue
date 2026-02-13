@@ -2,56 +2,7 @@
 // Can create or update an existing index.db file.
 // Run this daily.
 
-import { ARRAY, arrayValue, DuckDBConnection, DuckDBInstance, VARCHAR } from "@duckdb/node-api";
-
-const writeIndex = async () => {
-  const db = await DuckDBInstance.create("./index.db");
-
-  const connection = await db.connect();
-
-  console.log("Building latest file index of min-max timepoints in each S3 file of events");
-
-  await connection.run(`CREATE OR REPLACE SECRET secret (
-      TYPE s3,
-      KEY_ID '${process.env.S3_ACCESS_KEY_ID}',
-      SECRET '${process.env.S3_SECRET_ACCESS_KEY}',
-      ENDPOINT '${new URL(process.env.S3_ENDPOINT ?? "").host}',
-      REGION '${process.env.S3_REGION}'
-    );`);
-
-  console.time("create index if not exists");
-  await connection.run(`
-CREATE TABLE IF NOT EXISTS files AS (
-    SELECT filename, 
-    MIN(event.timepoint) as min, 
-    MAX(event.timepoint) as max,
-    SPLIT(filename, '/')[4] AS stream
-    --TODO: investigate parsing errors in officers data
-    FROM read_json('s3://companies-stream-sink/*/*.json.gz', ignore_errors = true) 
-    GROUP BY filename
-);
-`);
-  console.timeEnd("create index if not exists");
-
-  // I think this actually requires first querying which files are missing, then a second query filtered only on those files.otherwise it rebuilds all of it.
-  console.time("update index");
-  // add any missing ones. seems to be rebuilding from scratch before filtering out ones already done.
-  await connection.run(`
-    INSERT INTO files (
-        SELECT filename,
-        MIN(event.timepoint) as min,
-        MAX(event.timepoint) as max,
-        SPLIT(filename, '/')[4] AS stream
-        FROM read_json('s3://companies-stream-sink/*/*.json.gz', ignore_errors = true)
-        WHERE filename NOT IN (SELECT filename FROM files)
-        GROUP BY filename
-    );
-`);
-  console.timeEnd("update index");
-
-  connection.closeSync();
-  db.closeSync();
-};
+import { DuckDBConnection } from "@duckdb/node-api";
 
 export async function updateIndex(dbConn: DuckDBConnection) {
   console.log(new Date(), "Updating index");
