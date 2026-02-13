@@ -1,0 +1,24 @@
+name: Validate Terraform
+on:
+  push:
+    paths:
+      - ".github/workflows/terraform-validate.yml"
+      - "terraform/**"
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: terraform init -backend=false
+        working-directory: terraform/prod
+      - run: terraform validate
+        working-directory: terraform/prod
+
+      - run: terraform init -backend=false
+        working-directory: terraform/dev
+      - run: terraform validate
+        working-directory: terraform/dev
+
+      - run: terraform fmt --check --recursive .
+        working-directory: terraform

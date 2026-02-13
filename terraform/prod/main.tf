@@ -13,22 +13,9 @@ terraform {
 }
 
 module "companies_catalogue" {
-  source = "./.."
-  access_key = var.access_key
-  secret_key = var.secret_key
-  s3_region = var.s3_region
+  source      = "./.."
+  access_key  = var.access_key
+  secret_key  = var.secret_key
+  s3_region   = var.s3_region
   s3_endpoint = var.s3_endpoint
-}
-
-import {
-  to = module.companies_catalogue.aws_s3_bucket.stream_sink
-  id = "companies-stream-sink"
-}
-import {
-  to = module.companies_catalogue.aws_s3_bucket.stream_lake
-  id = "companies-stream-lake"
-}
-import {
-  to = module.companies_catalogue.aws_s3_bucket.stream_snapshots
-  id = "companies-stream-snapshots"
 }
