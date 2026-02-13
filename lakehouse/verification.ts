@@ -1,6 +1,6 @@
 // Tests to verify the integrity and quality of the data
 
-import { setupLakehouseConnection } from "../historicalEvents/connection.js";
+import { setupLakehouseConnection } from "./connection.js";
 import { streams } from "./utils.js";
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 
