@@ -4,6 +4,15 @@
 import { streams } from "./utils.js";
 import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
 
+/* TODO:
+ *  This process should be converted to a more pure SQL pipeline.
+ *  Move the SQL statements to a .sql file which gets read and run.
+ *  Replace JS string interpolation by getting bucket name from env vars (getenv('SINK_BUCKET')).
+ *  - SET VARIABLE streamPath = '${streamPath}';
+ *  - getvariable('streamPath') in usages
+ *  Still wrap execution in Bun typescript, but let lakehouse logic all sit in SQL files.
+ */
+
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 const sinkBucket = process.env.SINK_BUCKET;
 async function main(streamPath: string) {
