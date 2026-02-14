@@ -65,6 +65,16 @@ async function main(streamPath: string) {
   ) {
     throw new Error("Latest published_at is too old");
   }
+
+  /*
+  Other things to check:
+   - are all the events in order
+   - does the count of events match the max - min timepoint
+   - scan last 5 files and check for duplicate or malformed events
+   - check there are no gaps in the last 5 files
+   - check that the uuid timestamp roughly matches the published_at's
+   - check the resource type is what we expect for the stream
+   */
 }
 
 await main(process.argv[2]);

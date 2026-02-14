@@ -55,6 +55,7 @@ async function main(streamPath: string) {
     console.log("Loading", files.length, "of", allFiles.length, "files into lakehouse", files);
 
     console.time("load events");
+    //TODO: could explicitly filter out error events, although even.timepoint is not null probably handles that.
     await connection.run(`
             INSERT INTO events BY NAME
             (FROM read_json(${JSON.stringify(files)}, columns = {resource_kind : 'VARCHAR',
@@ -83,6 +84,12 @@ async function main(streamPath: string) {
         -- at most 1 million events at a time
         LIMIT 1000000
     `;
+  // change this to make the snapshot a single parquet file on s3.
+  // instead of merge into, create a table from the previous snapshot.
+  // add a primary key on the resource_uri
+  // then insert or replace into from deduped new events
+  // and delete any deleted events
+  // then re-upload to s3. copy snapshot to 's3://companies.parquet';
   await connection.run(`
         WITH new_events AS (${newEventsSql}),
             latest AS (SELECT resource_uri, MAX(event.timepoint) as max_timepoint
