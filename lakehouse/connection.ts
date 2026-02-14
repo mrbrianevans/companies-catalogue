@@ -20,8 +20,7 @@ CREATE SECRET s3 (
     KEY_ID '${process.env.S3_ACCESS_KEY_ID}',
     SECRET '${process.env.S3_SECRET_ACCESS_KEY}',
     REGION '${process.env.S3_REGION}',
-    ENDPOINT '${new URL(process.env.S3_ENDPOINT ?? "").host}',
-    SCOPE 's3://${process.env.SINK_BUCKET}'
+    ENDPOINT '${new URL(process.env.S3_ENDPOINT ?? "").host}'
 );
 
 CREATE SECRET lakehouse (
