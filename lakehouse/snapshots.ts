@@ -38,14 +38,14 @@ async function main(streamPath: string) {
   const outputFiles = [];
   // export local snapshot to various formats on S3
   const fileTypes = [
-    { format: "json", compression: "none", extension: ".json", description: "JSON" },
-    {
-      format: "parquet",
-      compression: "snappy",
-      extension: ".parquet",
-      description: "Parquet",
-    },
-    { format: "json", compression: "gzip", extension: ".json.gz", description: "JSON (gzip)" },
+    // { format: "json", compression: "none", extension: ".json", description: "JSON" },
+    // {
+    //   format: "parquet",
+    //   compression: "snappy",
+    //   extension: ".parquet",
+    //   description: "Parquet",
+    // },
+    // { format: "json", compression: "gzip", extension: ".json.gz", description: "JSON (gzip)" },
     {
       format: "json",
       compression: "zstd",
@@ -75,26 +75,26 @@ async function main(streamPath: string) {
   }
 
   // split files
-  const fileSizeBytes = 512 * 1024 * 1024;
-  for (const f of fileTypes) {
-    //TODO: clean out existing files from path in bucket in case snapshot size decreases and leaves an old partition. (low risk)
-    console.time("export split " + f.extension);
-    const filesRes = await connection.runAndReadAll(`
-            COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
-            TO 's3://${snapshotBucket}/split/${streamPath}'
-            (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}', RETURN_FILES true);
-            `);
-    console.timeEnd("export split " + f.extension);
-    outputFiles.push(
-      ...filesRes.getRowObjects().map((fileRow) => ({
-        files: (fileRow.Files as DuckDBListValue).items.map((file) =>
-          (file as string).replace(`s3://${snapshotBucket}`, ""),
-        ),
-        count: Number(fileRow.Count),
-        ...f,
-      })),
-    );
-  }
+  // const fileSizeBytes = 512 * 1024 * 1024;
+  // for (const f of fileTypes) {
+  //   //TODO: clean out existing files from path in bucket in case snapshot size decreases and leaves an old partition. (low risk)
+  //   console.time("export split " + f.extension);
+  //   const filesRes = await connection.runAndReadAll(`
+  //           COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri)
+  //           TO 's3://${snapshotBucket}/split/${streamPath}'
+  //           (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}', RETURN_FILES true);
+  //           `);
+  //   console.timeEnd("export split " + f.extension);
+  //   outputFiles.push(
+  //     ...filesRes.getRowObjects().map((fileRow) => ({
+  //       files: (fileRow.Files as DuckDBListValue).items.map((file) =>
+  //         (file as string).replace(`s3://${snapshotBucket}`, ""),
+  //       ),
+  //       count: Number(fileRow.Count),
+  //       ...f,
+  //     })),
+  //   );
+  // }
 
   //sample of 1000 items
   for (const f of fileTypes) {
