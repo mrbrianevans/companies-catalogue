@@ -34,7 +34,7 @@ async function main(streamPath: string) {
     `);
   console.timeEnd("create local snapshot from lakehouse");
 
-  await connection.run(`SET preserve_insertion_order = true;`);
+  await connection.run(`SET preserve_insertion_order = false;`);
   const outputFiles = [];
   // export local snapshot to various formats on S3
   const fileTypes = [
@@ -78,9 +78,10 @@ async function main(streamPath: string) {
 
   //one file
   for (const file of fileTypes.filter((f) => f.single)) {
+    console.log("Exporting single file", file.description);
     console.time("export " + file.extension);
     const filesRes = await connection.runAndReadAll(`
-        COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
+        COPY (FROM local.${getSchema(streamPath)}.snapshot) 
         TO 's3://${snapshotBucket}/${streamPath}${file.extension}'
         (FORMAT ${file.format}, COMPRESSION ${file.compression}, RETURN_FILES true);
         `);
@@ -99,10 +100,11 @@ async function main(streamPath: string) {
   // split files
   const fileSizeBytes = 128 * 1024 * 1024;
   for (const f of fileTypes.filter((f) => f.split)) {
+    console.log("Exporting split files", f.description, fileSizeBytes / 1024 / 1024, "MB max file size");
     //TODO: clean out existing files from path in bucket in case snapshot size decreases and leaves an old partition. (low risk)
     console.time("export split " + f.extension);
     const filesRes = await connection.runAndReadAll(`
-            COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri)
+            COPY (FROM local.${getSchema(streamPath)}.snapshot)
             TO 's3://${snapshotBucket}/split/${streamPath}'
             (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}', RETURN_FILES true);
             `);
