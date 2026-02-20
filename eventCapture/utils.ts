@@ -62,9 +62,10 @@ export async function getLastJsonLine(filePath: string): Promise<Record<string, 
 }
 
 export async function writeStreamToFile(stream: AsyncIterable<Buffer>, filename: string) {
-  /* Simpler version needs testing for handling of heart beat and performance.
+  /* Simpler version:
+  (duckdb ignores extra newlines caused by heart beats)
    *     const outputStream = createWriteStream(filename)
-   *     await pipeline(Readable.from(stream).filter(chunk=>!(chunk.length === 1 && chunk[0] === 0x0a)), outputStream)
+   *     await pipeline(Readable.from(stream), outputStream)
    *     const {bytesWritten} = outputStream;
    */
   const sink = Bun.file(filename);
@@ -109,11 +110,14 @@ const client = new S3Client({
 export async function uploadToS3(file: string, streamName: string) {
   console.log(new Date(), "Uploading", file, "to S3");
   const objectPath = getS3ObjectPath(file, streamName);
+  //TODO: check that input file contains data.
+  // if size < 100 bytes, scan and strip new lines. check size is > 0
   const s3file = client.file(objectPath);
   const writer = s3file.writer();
   const bytesWritten = await pipeline(
     createReadStream(file),
     createGzip(),
+    // see if stream.compose() could simplify this. or make it more re-usable
     async function (source) {
       let bytesWriten = 0;
       for await (const chunk of source) {
@@ -123,6 +127,7 @@ export async function uploadToS3(file: string, streamName: string) {
       return bytesWriten;
     },
   );
+  //TODO: delete file after upload. don't maintain local state.
   console.log(new Date(), "Uploaded", bytesWritten, "bytes to S3", objectPath);
 }
 
@@ -137,6 +142,9 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
     get(options, (res) => {
       if (res.statusCode === 200) {
         console.log(new Date(), "Connected to stream", streamPath);
+        //TODO: would be good to only self kill when mass data stops coming through.
+        // so if there isn't much data waiting, the crawl is faster.
+        // but if there's loads it could take longer than a minute.
         setTimeout(
           () => res.destroy(new Error("self-terminated connection after some time")),
           60_000,
@@ -156,7 +164,7 @@ export async function getLastSavedTimepoint(outputDir: string, streamName: strin
   // TODO: add pagination
   if (len > 999) throw new Error("Too many files in S3 bucket. Add pagination to list files");
   const sortedKeys = files.contents?.map((k) => k.key).toSorted() ?? [];
-  if (!sortedKeys.length) throw new Error("No files in S3 bucket"); // this could just return undefined to allow starting from scratch
+  if (!sortedKeys.length) return undefined;
   const lastS3File = sortedKeys.at(-1)!;
 
   const filename = lastS3File.split("/").at(-1)!.replace(".gz", "");

@@ -4,6 +4,15 @@
 import { streams } from "./utils.js";
 import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
 
+/* TODO:
+ *  This process should be converted to a more pure SQL pipeline.
+ *  Move the SQL statements to a .sql file which gets read and run.
+ *  Replace JS string interpolation by getting bucket name from env vars (getenv('SINK_BUCKET')).
+ *  - SET VARIABLE streamPath = '${streamPath}';
+ *  - getvariable('streamPath') in usages
+ *  Still wrap execution in Bun typescript, but let lakehouse logic all sit in SQL files.
+ */
+
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 const sinkBucket = process.env.SINK_BUCKET;
 async function main(streamPath: string) {
@@ -55,6 +64,7 @@ async function main(streamPath: string) {
     console.log("Loading", files.length, "of", allFiles.length, "files into lakehouse", files);
 
     console.time("load events");
+    //TODO: could explicitly filter out error events, although even.timepoint is not null probably handles that.
     await connection.run(`
             INSERT INTO events BY NAME
             (FROM read_json(${JSON.stringify(files)}, columns = {resource_kind : 'VARCHAR',
@@ -83,6 +93,12 @@ async function main(streamPath: string) {
         -- at most 1 million events at a time
         LIMIT 1000000
     `;
+  // change this to make the snapshot a single parquet file on s3.
+  // instead of merge into, create a table from the previous snapshot.
+  // add a primary key on the resource_uri
+  // then insert or replace into from deduped new events
+  // and delete any deleted events
+  // then re-upload to s3. copy snapshot to 's3://companies.parquet';
   await connection.run(`
         WITH new_events AS (${newEventsSql}),
             latest AS (SELECT resource_uri, MAX(event.timepoint) as max_timepoint
