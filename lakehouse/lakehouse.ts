@@ -3,7 +3,8 @@
 
 import { streams } from "./utils.js";
 import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
-
+// @ts-ignore
+import lakehouseSnapshotSql from './lakehouse_snapshot.sql' with { type: "text" };
 /* TODO:
  *  This process should be converted to a more pure SQL pipeline.
  *  Move the SQL statements to a .sql file which gets read and run.
@@ -59,10 +60,10 @@ async function main(streamPath: string) {
   const allFiles = res.getRowObjects().map((f) => f.file as string);
   const files = allFiles.slice(0, 1); // if this is more than one, you need to apply DISTINCT on events before inserting.
 
-  await connection.run("BEGIN TRANSACTION;");
   if (files.length) {
     console.log("Loading", files.length, "of", allFiles.length, "files into lakehouse", files);
 
+      await connection.run("BEGIN TRANSACTION;");
     console.time("load events");
     //TODO: could explicitly filter out error events, although even.timepoint is not null probably handles that.
     await connection.run(`
@@ -81,44 +82,14 @@ async function main(streamPath: string) {
         VALUES
         ${files.map((f) => `('${f}')`).join(",")};`);
     console.log("Updated loaded_files table with", files.length, "new files");
+      await connection.run("COMMIT;");
   }
 
   console.log("Merging any unmerged events into the snapshot");
-  console.time("merge snapshot");
-  const newEventsSql = `
-        SELECT *
-        FROM events
-        WHERE event.timepoint > (SELECT COALESCE(MAX(event.timepoint), 0) FROM snapshot)
-        ORDER BY event.timepoint ASC
-        -- at most 1 million events at a time
-        LIMIT 1000000
-    `;
-  // change this to make the snapshot a single parquet file on s3.
-  // instead of merge into, create a table from the previous snapshot.
-  // add a primary key on the resource_uri
-  // then insert or replace into from deduped new events
-  // and delete any deleted events
-  // then re-upload to s3. copy snapshot to 's3://companies.parquet';
-  await connection.run(`
-        WITH new_events AS (${newEventsSql}),
-            latest AS (SELECT resource_uri, MAX(event.timepoint) as max_timepoint
-                       FROM new_events
-                       GROUP BY resource_uri),
-            deduped AS (SELECT e.*
-                        FROM new_events e
-                                 INNER JOIN latest ON e.event.timepoint = latest.max_timepoint)
-            MERGE INTO snapshot
-        USING (FROM deduped)
-            USING
-            (resource_uri)
-            WHEN NOT MATCHED THEN
-        INSERT BY NAME
-            WHEN MATCHED THEN
-        UPDATE;
-    `);
+    console.time("merge snapshot");
+    await connection.run(lakehouseSnapshotSql);
   console.timeEnd("merge snapshot");
 
-  await connection.run("COMMIT;");
 
   await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath });
 }
