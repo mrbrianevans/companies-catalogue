@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 
 const lakeBucket = new S3Client({ bucket: process.env.LAKE_BUCKET });
 
-export async function setupLakehouseConnection(existingPath?:string) {
+export async function setupLakehouseConnection(existingPath?: string) {
   const tmpDbFilepath = existingPath ?? tmpdir() + `/${randomUUIDv7()}_catalogue.ducklake`;
   const tempDbFile = Bun.file(tmpDbFilepath);
   const db = await DuckDBInstance.create(":memory:");
@@ -32,10 +32,9 @@ CREATE SECRET lakehouse (
 
   const remoteCataloguePath = "catalogue.ducklake";
   const catalogueDbFile = lakeBucket.file(remoteCataloguePath);
-  if(await tempDbFile.exists()){
+  if (await tempDbFile.exists()) {
     console.log("using existing local lakehouse catalogue", tempDbFile.name);
-  }
-  else if (await catalogueDbFile.exists()) {
+  } else if (await catalogueDbFile.exists()) {
     await tempDbFile.write(await catalogueDbFile.bytes());
     console.log("downloaded lakehouse catalogue to", tempDbFile.name);
   } else {
@@ -51,19 +50,18 @@ export async function saveAndCloseLakehouse({
   connection,
   tempDbFile,
   remoteCataloguePath,
-    deleteLocal = true
+  deleteLocal = true,
 }: {
   connection: DuckDBConnection;
   tempDbFile: Bun.BunFile;
   remoteCataloguePath: string;
   deleteLocal?: boolean;
 }) {
-    await connection.run(`
+  await connection.run(`
     ATTACH ':memory:' AS memory_db;
     USE memory_db;
     `);
-    await connection.run("DETACH lakehouse;");
-
+  await connection.run("DETACH lakehouse;");
 
   await lakeBucket.write(remoteCataloguePath, tempDbFile);
   console.log("uploaded lakehouse catalogue back to", remoteCataloguePath);

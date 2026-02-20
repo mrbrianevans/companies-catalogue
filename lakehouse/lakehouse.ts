@@ -4,7 +4,7 @@
 import { streams } from "./utils.js";
 import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
 // @ts-ignore
-import lakehouseSnapshotSql from './lakehouse_snapshot.sql' with { type: "text" };
+import lakehouseSnapshotSql from "./lakehouse_snapshot.sql" with { type: "text" };
 /* TODO:
  *  This process should be converted to a more pure SQL pipeline.
  *  Move the SQL statements to a .sql file which gets read and run.
@@ -63,7 +63,7 @@ async function main(streamPath: string) {
   if (files.length) {
     console.log("Loading", files.length, "of", allFiles.length, "files into lakehouse", files);
 
-      await connection.run("BEGIN TRANSACTION;");
+    await connection.run("BEGIN TRANSACTION;");
     console.time("load events");
     //TODO: could explicitly filter out error events, although even.timepoint is not null probably handles that.
     await connection.run(`
@@ -82,14 +82,13 @@ async function main(streamPath: string) {
         VALUES
         ${files.map((f) => `('${f}')`).join(",")};`);
     console.log("Updated loaded_files table with", files.length, "new files");
-      await connection.run("COMMIT;");
+    await connection.run("COMMIT;");
   }
 
   console.log("Merging any unmerged events into the snapshot");
-    console.time("merge snapshot");
-    await connection.run(lakehouseSnapshotSql);
+  console.time("merge snapshot");
+  await connection.run(lakehouseSnapshotSql);
   console.timeEnd("merge snapshot");
-
 
   await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath });
 }
