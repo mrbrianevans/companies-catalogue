@@ -115,9 +115,9 @@ CREATE SECRET s3_sink (
     `SELECT min(min) as tmin, max(max) as tmax, sum(count) as tcount, tmax-tmin+1 as diff, diff = tcount as correct, tcount-diff as extra FROM checks;`,
   );
   const rangeCorrect = rangeCorrectRes.getRowObjects()[0];
-  console.log("Last 5 files stats:", rangeCorrect);
+  console.log(`Last ${latestFiles.length} files stats:`, rangeCorrect);
   if (!rangeCorrect.correct) throw new Error("Last 5 files count vs diff incorrect");
-  console.log("Last 5 files are correct and complete");
+  console.log(`Last ${latestFiles.length} files are correct and complete`);
 
   console.log("All passed!");
   connection.closeSync();
