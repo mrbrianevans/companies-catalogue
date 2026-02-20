@@ -6,6 +6,8 @@ import { get, type RequestOptions } from "https";
 import { readdir } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
+import {Readable} from "node:stream";
+
 
 export async function getLastJsonLine(filePath: string): Promise<Record<string, any> | undefined> {
   if (!existsSync(filePath)) return undefined;
@@ -62,39 +64,11 @@ export async function getLastJsonLine(filePath: string): Promise<Record<string, 
 }
 
 export async function writeStreamToFile(stream: AsyncIterable<Buffer>, filename: string) {
-  /* Simpler version:
-  (duckdb ignores extra newlines caused by heart beats)
-   *     const outputStream = createWriteStream(filename)
-   *     await pipeline(Readable.from(stream), outputStream)
-   *     const {bytesWritten} = outputStream;
-   */
-  const sink = Bun.file(filename);
-  const writer = sink.writer();
-  let bytesWritten = 0;
-  try {
-    // TODO: could this just be await pipeline(stream, createWriteStream(filename))?
-    //  Might be simpler and equal performance.
-    for await (const chunk of stream) {
-      if (chunk.length === 1 && chunk[0] === 0x0a) {
-        continue; //heartbeat received
-      }
-      bytesWritten += await writer.write(chunk);
-    }
-  } catch (e) {
-    console.error("Error writing stream to file", filename, e);
-  } finally {
-    bytesWritten += await writer.flush();
-  }
-
-  bytesWritten += await writer.end();
-  if (bytesWritten === 0) {
-    console.log("No data written to file", filename);
-    await sink.delete();
-    return false;
-  } else {
-    console.log("Wrote", bytesWritten, "bytes to file", filename);
-    return true;
-  }
+ // duckdb ignores extra newlines caused by heart beats, so they don't need to be filtered out
+  const outputStream = createWriteStream(filename)
+  await pipeline(Readable.from(stream), outputStream)
+  const {bytesWritten} = outputStream;
+  console.log("Wrote", bytesWritten, "bytes to file", filename);
 }
 
 const { S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, SINK_BUCKET } = process.env;
@@ -109,9 +83,17 @@ const client = new S3Client({
 
 export async function uploadToS3(file: string, streamName: string) {
   console.log(new Date(), "Uploading", file, "to S3");
+  const localFile = Bun.file(file)
+  if(localFile.size < 100){
+    // check that it's not just whitespace
+    const content = await localFile.text()
+    if(content.trim().length === 0){
+      console.log('No content in file, skipping upload', file)
+      await localFile.delete()
+      return;
+    }
+  }
   const objectPath = getS3ObjectPath(file, streamName);
-  //TODO: check that input file contains data.
-  // if size < 100 bytes, scan and strip new lines. check size is > 0
   const s3file = client.file(objectPath);
   const writer = s3file.writer();
   const bytesWritten = await pipeline(
@@ -127,8 +109,8 @@ export async function uploadToS3(file: string, streamName: string) {
       return bytesWriten;
     },
   );
-  //TODO: delete file after upload. don't maintain local state.
   console.log(new Date(), "Uploaded", bytesWritten, "bytes to S3", objectPath);
+  await localFile.delete()
 }
 
 export async function streamFromCh(streamPath: string, startFromTimepoint?: number) {

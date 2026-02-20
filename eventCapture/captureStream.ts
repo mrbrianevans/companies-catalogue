@@ -45,6 +45,7 @@ process.on("unhandledRejection", (reason) => {
   console.error("Unhandled Rejection:", reason);
 });
 
+//TODO: don't think these are needed anymore. might be dangerous with distributed design.
 await uploadExistingFilesToS3(outputDir, streamName);
 await cleanupOldFiles(outputDir, streamName);
 
@@ -54,8 +55,8 @@ async function captureStream() {
     const pickUpFrom = lastTimepoint ? lastTimepoint + 1 : undefined;
     const incomingStream = await streamFromCh(streamName, pickUpFrom);
     const outputName = `${outputDir}/${randomUUIDv7()}.json`;
-    const written = await writeStreamToFile(incomingStream, outputName);
-    if (written) await uploadToS3(outputName, streamName);
+    await writeStreamToFile(incomingStream, outputName);
+    await uploadToS3(outputName, streamName);
     await cleanupOldFiles(outputDir, streamName);
   } catch (error) {
     console.error(new Date(), "Error capturing stream", streamName, error);
