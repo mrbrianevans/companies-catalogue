@@ -1,6 +1,7 @@
 // This is to clean up the lakehouse. must not be run at the same time as other processes which modify the lakehouse.
 
 import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
+import {DuckDBInstance} from "@duckdb/node-api";
 
 // destructive and non-destructive operations are split, with saving the catalogue in between to avoid data loss if the last upload fails.
 
@@ -41,8 +42,22 @@ async function main() {
   console.timeEnd("destructive operations");
 
   // save catalogue again. less important this time.
-  //TODO: run CHECKPOINT on the catalogue database itself.
-  await saveAndCloseLakehouse(newConn);
+  await saveAndCloseLakehouse({...newConn,deleteLocal: false});
+
+  {
+    // run CHECKPOINT on the catalogue database itself.
+    const db = await DuckDBInstance.create(':memory:');
+    const connection = await db.connect();
+    console.time('checkpoint catalogue')
+    await connection.run(`
+    ATTACH '${tempDbFile.name}' AS lakehouse;
+    USE lakehouse;
+    CHECKPOINT;
+    `);
+    console.timeEnd('checkpoint catalogue')
+    await saveAndCloseLakehouse({connection, tempDbFile, remoteCataloguePath, deleteLocal: true});
+  }
+
 }
 
 await main();
