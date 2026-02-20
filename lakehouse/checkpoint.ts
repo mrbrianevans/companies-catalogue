@@ -1,6 +1,7 @@
 // This is to clean up the lakehouse. must not be run at the same time as other processes which modify the lakehouse.
 
 import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
+import { DuckDBInstance } from "@duckdb/node-api";
 
 // destructive and non-destructive operations are split, with saving the catalogue in between to avoid data loss if the last upload fails.
 
@@ -20,14 +21,15 @@ async function main() {
   console.timeEnd("non-destructive operations");
 
   // save catalogue
-  await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath, detach: false });
+  await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath, deleteLocal: false });
 
   // at this point, the old files are not referenced by ducklake at all.
   // the S3 version of the catalogue references rewritten files not scheduled for deletion.
 
+  const newConn = await setupLakehouseConnection(tempDbFile.name);
   // operations that destroy old parquet files
   console.time("destructive operations");
-  await connection.run(`
+  await newConn.connection.run(`
     CALL ducklake_cleanup_old_files(
         'lakehouse',
         cleanup_all => true
@@ -40,7 +42,21 @@ async function main() {
   console.timeEnd("destructive operations");
 
   // save catalogue again. less important this time.
-  await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath, detach: true });
+  await saveAndCloseLakehouse({ ...newConn, deleteLocal: false });
+
+  {
+    // run CHECKPOINT on the catalogue database itself.
+    const db = await DuckDBInstance.create(":memory:");
+    const connection = await db.connect();
+    console.time("checkpoint catalogue");
+    await connection.run(`
+    ATTACH '${tempDbFile.name}' AS lakehouse;
+    USE lakehouse;
+    CHECKPOINT;
+    `);
+    console.timeEnd("checkpoint catalogue");
+    await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath, deleteLocal: true });
+  }
 }
 
 await main();
