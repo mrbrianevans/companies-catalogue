@@ -6,7 +6,7 @@ const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, 
 async function main() {
   const { connection, tempDbFile, remoteCataloguePath } = await setupLakehouseConnection();
 
-  const streamPath = "persons-with-significant-control";
+  const streamPath = "persons-with-significant-control-statements";
   await connection.run(`USE lakehouse.${getSchema(streamPath)};`);
 
   const tablesRes = await connection.runAndReadAll(`SHOW TABLES;`);
@@ -15,7 +15,7 @@ async function main() {
 
   const res = await connection.runAndReadAll(`
     SELECT COUNT(*) as count, COUNT(DISTINCT event.timepoint) as distinct_timepoints
-    FROM SNAPSHOT WHERE event.timepoint >= 23000000;
+    FROM snapshot;
     `);
 
   const row = res.getRowObjects()[0];
