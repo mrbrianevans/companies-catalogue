@@ -38,24 +38,24 @@ async function main(streamPath: string) {
   const outputFiles = [];
   // export local snapshot to various formats on S3
   const fileTypes = [
-    // { format: "json", compression: "none", extension: ".json", description: "JSON" },
-    // {
-    //   format: "parquet",
-    //   compression: "snappy",
-    //   extension: ".parquet",
-    //   description: "Parquet",
-    // },
-    // { format: "json", compression: "gzip", extension: ".json.gz", description: "JSON (gzip)" },
+    { format: "json", compression: "none", extension: ".json", description: "JSON", split: false, sample: true, single: false },
+    {
+      format: "parquet",
+      compression: "snappy",
+      extension: ".parquet",
+      description: "Parquet", split: true, sample: true, single: false,
+    },
+    { format: "json", compression: "gzip", extension: ".json.gz", description: "JSON (gzip)", split: false, sample: false, single: false },
     {
       format: "json",
       compression: "zstd",
       extension: ".json.zst",
-      description: "JSON (zstd)",
+      description: "JSON (zstd)", split: false, sample: true, single: true,
     },
   ];
 
   //one file
-  for (const file of fileTypes) {
+  for (const file of fileTypes.filter(f=>f.single)) {
     console.time("export " + file.extension);
     const filesRes = await connection.runAndReadAll(`
         COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri) 
@@ -75,29 +75,29 @@ async function main(streamPath: string) {
   }
 
   // split files
-  // const fileSizeBytes = 512 * 1024 * 1024;
-  // for (const f of fileTypes) {
-  //   //TODO: clean out existing files from path in bucket in case snapshot size decreases and leaves an old partition. (low risk)
-  //   console.time("export split " + f.extension);
-  //   const filesRes = await connection.runAndReadAll(`
-  //           COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri)
-  //           TO 's3://${snapshotBucket}/split/${streamPath}'
-  //           (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}', RETURN_FILES true);
-  //           `);
-  //   console.timeEnd("export split " + f.extension);
-  //   outputFiles.push(
-  //     ...filesRes.getRowObjects().map((fileRow) => ({
-  //       files: (fileRow.Files as DuckDBListValue).items.map((file) =>
-  //         (file as string).replace(`s3://${snapshotBucket}`, ""),
-  //       ),
-  //       count: Number(fileRow.Count),
-  //       ...f,
-  //     })),
-  //   );
-  // }
+  const fileSizeBytes = 128 * 1024 * 1024;
+  for (const f of fileTypes.filter(f=>f.split)) {
+    //TODO: clean out existing files from path in bucket in case snapshot size decreases and leaves an old partition. (low risk)
+    console.time("export split " + f.extension);
+    const filesRes = await connection.runAndReadAll(`
+            COPY (FROM local.${getSchema(streamPath)}.snapshot ORDER BY resource_uri)
+            TO 's3://${snapshotBucket}/split/${streamPath}'
+            (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}', RETURN_FILES true);
+            `);
+    console.timeEnd("export split " + f.extension);
+    outputFiles.push(
+      ...filesRes.getRowObjects().map((fileRow) => ({
+        files: (fileRow.Files as DuckDBListValue).items.map((file) =>
+          (file as string).replace(`s3://${snapshotBucket}`, ""),
+        ),
+        count: Number(fileRow.Count),
+        ...f,
+      })),
+    );
+  }
 
   //sample of 1000 items
-  for (const f of fileTypes) {
+  for (const f of fileTypes.filter(f=>f.sample)) {
     console.time("export sample " + f.extension);
     const filesRes = await connection.runAndReadAll(`
             COPY (FROM local.${getSchema(streamPath)}.snapshot USING SAMPLE 1000) 
@@ -117,6 +117,7 @@ async function main(streamPath: string) {
   }
 
   console.log("Exported files", JSON.stringify(outputFiles));
+  //TODO: add more metadata to the manifest by querying the snapshot. eg min/max of timepoint and published_at.
   const manifest = {
     streamPath,
     publishedAt: new Date().toISOString(),
