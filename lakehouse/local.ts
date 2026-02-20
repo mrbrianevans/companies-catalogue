@@ -15,7 +15,7 @@ async function main() {
 
   const res = await connection.runAndReadAll(`
     SELECT COUNT(*) as count, COUNT(DISTINCT event.timepoint) as distinct_timepoints
-    FROM events WHERE event.timepoint >= 23000000;
+    FROM SNAPSHOT WHERE event.timepoint >= 23000000;
     `);
 
   const row = res.getRowObjects()[0];

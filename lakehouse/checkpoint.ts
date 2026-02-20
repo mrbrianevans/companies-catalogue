@@ -20,14 +20,15 @@ async function main() {
   console.timeEnd("non-destructive operations");
 
   // save catalogue
-  await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath, detach: false });
+  await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath, deleteLocal: false });
 
   // at this point, the old files are not referenced by ducklake at all.
   // the S3 version of the catalogue references rewritten files not scheduled for deletion.
 
+  const newConn = await setupLakehouseConnection(tempDbFile.name);
   // operations that destroy old parquet files
   console.time("destructive operations");
-  await connection.run(`
+  await newConn.connection.run(`
     CALL ducklake_cleanup_old_files(
         'lakehouse',
         cleanup_all => true
@@ -40,7 +41,8 @@ async function main() {
   console.timeEnd("destructive operations");
 
   // save catalogue again. less important this time.
-  await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath, detach: true });
+  //TODO: run CHECKPOINT on the catalogue database itself.
+  await saveAndCloseLakehouse(newConn);
 }
 
 await main();
