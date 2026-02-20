@@ -117,11 +117,23 @@ async function main(streamPath: string) {
   }
 
   console.log("Exported files", JSON.stringify(outputFiles));
-  //TODO: add more metadata to the manifest by querying the snapshot. eg min/max of timepoint and published_at.
+
+  const metadataRes = await connection.runAndReadAll(`
+    SELECT 
+        COUNT(*)::FLOAT as recordCount,
+        MIN(event.timepoint)::FLOAT as minTimepoint,
+        MAX(event.timepoint)::FLOAT as maxTimepoint,
+        MIN(event.published_at) as minPublishedAt,
+        MAX(event.published_at) as maxPublishedAt
+    FROM local.${getSchema(streamPath)}.snapshot;
+`);
+  const metadataRow = metadataRes.getRowObjects()[0];
+  console.log("Metadata", metadataRow);
+
   const manifest = {
     streamPath,
-    publishedAt: new Date().toISOString(),
-    records: Math.max(...outputFiles.map((f) => f.count)),
+    snapshotPublishedAt: new Date().toISOString(),
+    ...metadataRow,
     downloads: outputFiles,
   };
   await Bun.s3.write(`${streamPath}-manifest.json`, JSON.stringify(manifest), {
