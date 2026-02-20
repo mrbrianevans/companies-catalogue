@@ -1,5 +1,5 @@
 import { streams } from "../lakehouse/utils.ts";
-import {DuckDBInstance, INTEGER} from "@duckdb/node-api";
+import { DuckDBInstance, INTEGER } from "@duckdb/node-api";
 
 const sinkBucket = process.env.SINK_BUCKET;
 
@@ -9,9 +9,9 @@ async function main(streamPath: string) {
     return;
   }
 
-    const db = await DuckDBInstance.create(":memory:");
-    const connection = await db.connect();
-    await connection.run(`
+  const db = await DuckDBInstance.create(":memory:");
+  const connection = await db.connect();
+  await connection.run(`
 INSTALL httpfs;
 LOAD httpfs;
 
@@ -50,16 +50,20 @@ CREATE SECRET s3_sink (
     throw new Error("Latest file is older than 24 hours");
   }
   const limit = 5;
-  const latestFilesRes = await connection.runAndReadAll(`
+  const latestFilesRes = await connection.runAndReadAll(
+    `
         SELECT
             file
         FROM glob('s3://${sinkBucket}/${streamPath}/*.json.gz')
         ORDER BY file DESC
         LIMIT $limit
         ;
-    `, {limit}, {limit:INTEGER});
-const latestFiles = latestFilesRes.getRowObjects().map(f=>f.file as string);
-    console.log('Checking most recent', latestFiles.length, 'files')
+    `,
+    { limit },
+    { limit: INTEGER },
+  );
+  const latestFiles = latestFilesRes.getRowObjects().map((f) => f.file as string);
+  console.log("Checking most recent", latestFiles.length, "files");
 
   const latestFileName = latestFiles[0];
   console.log("Latest file:", latestFileName);
@@ -73,13 +77,10 @@ const latestFiles = latestFilesRes.getRowObjects().map(f=>f.file as string);
            current_timestamp - interval '24' hour as yesterday
     FROM read_json('${latestFileName}');
     `);
-  const {yesterday, ...latestTimepoints} = latestTimepointsRes.getRowObjects()[0];
+  const { yesterday, ...latestTimepoints } = latestTimepointsRes.getRowObjects()[0];
   console.log("Latest file stats:", latestTimepoints);
 
-  if (
-    new Date(latestTimepoints.max_published_at as string) <
-    new Date(yesterday.toString())
-  ) {
+  if (new Date(latestTimepoints.max_published_at as string) < new Date(yesterday.toString())) {
     throw new Error("Latest published_at is too old");
   }
 
@@ -96,28 +97,30 @@ const latestFiles = latestFilesRes.getRowObjects().map(f=>f.file as string);
   await connection.run(`
   CREATE OR REPLACE TEMPORARY TABLE checks AS (
   SELECT filename, MIN(event.timepoint) AS min, MAX(event.timepoint) AS max, COUNT(*) as count
-  FROM read_json([${latestFiles.map(f=>`'${f}'`).join(', ')}])
+  FROM read_json([${latestFiles.map((f) => `'${f}'`).join(", ")}])
   GROUP BY filename
   );
-  `)
+  `);
 
   const problemFilesRes = await connection.runAndReadAll(`
     SELECT * EXCLUDE COUNT, count as countDiff, max - min + 1 AS diff, diff = countDiff as correct, countDiff - diff as extra
     FROM checks WHERE correct = false ORDER BY min ASC;
-  `)
+  `);
   const problemFiles = problemFilesRes.getRowObjects();
   console.log("Problem files:", problemFiles);
-  if(problemFiles.length > 0) throw new Error("Problem files found");
+  if (problemFiles.length > 0) throw new Error("Problem files found");
   console.log("No problem files found");
 
-  const rangeCorrectRes = await connection.runAndReadAll(`SELECT min(min) as tmin, max(max) as tmax, sum(count) as tcount, tmax-tmin+1 as diff, diff = tcount as correct, tcount-diff as extra FROM checks;`);
+  const rangeCorrectRes = await connection.runAndReadAll(
+    `SELECT min(min) as tmin, max(max) as tmax, sum(count) as tcount, tmax-tmin+1 as diff, diff = tcount as correct, tcount-diff as extra FROM checks;`,
+  );
   const rangeCorrect = rangeCorrectRes.getRowObjects()[0];
   console.log("Last 5 files stats:", rangeCorrect);
-  if(!rangeCorrect.correct) throw new Error("Last 5 files count vs diff incorrect");
-    console.log('Last 5 files are correct and complete')
+  if (!rangeCorrect.correct) throw new Error("Last 5 files count vs diff incorrect");
+  console.log("Last 5 files are correct and complete");
 
   console.log("All passed!");
-  connection.closeSync()
+  connection.closeSync();
 }
 
 await main(process.argv[2]);
