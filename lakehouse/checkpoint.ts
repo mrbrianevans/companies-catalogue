@@ -49,6 +49,7 @@ async function main() {
     const db = await DuckDBInstance.create(":memory:");
     const connection = await db.connect();
     console.time("checkpoint catalogue");
+    // could possibly attach to __ducklake_metadata
     await connection.run(`
     ATTACH '${tempDbFile.name}' AS lakehouse;
     USE lakehouse;
