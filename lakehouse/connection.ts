@@ -35,8 +35,9 @@ CREATE SECRET lakehouse (
   if (await tempDbFile.exists()) {
     console.log("using existing local lakehouse catalogue", tempDbFile.name);
   } else if (await catalogueDbFile.exists()) {
+    console.time("downloaded lakehouse catalogue to "+ tempDbFile.name)
     await tempDbFile.write(await catalogueDbFile.bytes());
-    console.log("downloaded lakehouse catalogue to", tempDbFile.name);
+    console.timeEnd("downloaded lakehouse catalogue to "+ tempDbFile.name)
   } else {
     console.log("no lakehouse catalogue found, creating one.");
   }
@@ -63,8 +64,9 @@ export async function saveAndCloseLakehouse({
     `);
   await connection.run("DETACH lakehouse;");
 
+  console.time("uploaded lakehouse catalogue back to" + remoteCataloguePath);
   await lakeBucket.write(remoteCataloguePath, tempDbFile);
-  console.log("uploaded lakehouse catalogue back to", remoteCataloguePath);
+  console.timeEnd("uploaded lakehouse catalogue back to" + remoteCataloguePath);
 
   if (deleteLocal) await tempDbFile.delete();
 }
