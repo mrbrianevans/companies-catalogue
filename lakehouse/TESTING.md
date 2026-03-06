@@ -8,10 +8,9 @@ New S3 bucket for storing test results, and previous testing progress (to avoid 
 
 ## JSON sink tests
 
- - tests the 5 most recent files
- - checks data freshness (event published in latest 48 hours)
- - checks contiguous timepoints in each file and across all 5 files
-
+- tests the 5 most recent files
+- checks data freshness (event published in latest 48 hours)
+- checks contiguous timepoints in each file and across all 5 files
 
 ## Events lakehouse tests
 

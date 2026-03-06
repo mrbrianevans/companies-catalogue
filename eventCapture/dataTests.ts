@@ -119,6 +119,12 @@ CREATE SECRET s3_sink (
   if (!rangeCorrect.correct) throw new Error("Last 5 files count vs diff incorrect");
   console.log(`Last ${latestFiles.length} files are correct and complete`);
 
+  //TODO: test that events are stored in order.
+  // The above tests ensure that no events are missing in the last 5 files,
+  // but if they are out of order they would still pass the above.
+  // Add a test that streams rows from duckdb read_json() with preserve insertion order switched on.
+  // Keep a timepoint tracker incrementing in JS memory.
+
   console.log("All passed!");
   connection.closeSync();
 }

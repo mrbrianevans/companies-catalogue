@@ -6,8 +6,7 @@ import { get, type RequestOptions } from "https";
 import { readdir } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
-import {Readable} from "node:stream";
-
+import { Readable } from "node:stream";
 
 export async function getLastJsonLine(filePath: string): Promise<Record<string, any> | undefined> {
   if (!existsSync(filePath)) return undefined;
@@ -64,10 +63,10 @@ export async function getLastJsonLine(filePath: string): Promise<Record<string, 
 }
 
 export async function writeStreamToFile(stream: AsyncIterable<Buffer>, filename: string) {
- // duckdb ignores extra newlines caused by heart beats, so they don't need to be filtered out
-  const outputStream = createWriteStream(filename)
-  await pipeline(Readable.from(stream), outputStream)
-  const {bytesWritten} = outputStream;
+  // duckdb ignores extra newlines caused by heart beats, so they don't need to be filtered out
+  const outputStream = createWriteStream(filename);
+  await pipeline(Readable.from(stream), outputStream);
+  const { bytesWritten } = outputStream;
   console.log("Wrote", bytesWritten, "bytes to file", filename);
 }
 
@@ -83,13 +82,13 @@ const client = new S3Client({
 
 export async function uploadToS3(file: string, streamName: string) {
   console.log(new Date(), "Uploading", file, "to S3");
-  const localFile = Bun.file(file)
-  if(localFile.size < 100){
+  const localFile = Bun.file(file);
+  if (localFile.size < 100) {
     // check that it's not just whitespace
-    const content = await localFile.text()
-    if(content.trim().length === 0){
-      console.log('No content in file, skipping upload', file)
-      await localFile.delete()
+    const content = await localFile.text();
+    if (content.trim().length === 0) {
+      console.log("No content in file, skipping upload", file);
+      await localFile.delete();
       return;
     }
   }
@@ -110,7 +109,7 @@ export async function uploadToS3(file: string, streamName: string) {
     },
   );
   console.log(new Date(), "Uploaded", bytesWritten, "bytes to S3", objectPath);
-  await localFile.delete()
+  await localFile.delete();
 }
 
 export async function streamFromCh(streamPath: string, startFromTimepoint?: number) {

@@ -20,14 +20,14 @@ const outputDir = `output/${streamName}`;
 await mkdir(outputDir, { recursive: true });
 console.log(new Date(), "Output directory", outputDir);
 
-async function captureStream(streamName:string) {
-    const lastTimepoint = await getLastSavedTimepoint(outputDir, streamName);
-    const pickUpFrom = lastTimepoint ? lastTimepoint + 1 : undefined;
-    const incomingStream = await streamFromCh(streamName, pickUpFrom);
-    const outputName = `${outputDir}/${randomUUIDv7()}.json`;
-    await writeStreamToFile(incomingStream, outputName);
-    await uploadToS3(outputName, streamName);
-    await cleanupOldFiles(outputDir, streamName);
+async function captureStream(streamName: string) {
+  const lastTimepoint = await getLastSavedTimepoint(outputDir, streamName);
+  const pickUpFrom = lastTimepoint ? lastTimepoint + 1 : undefined;
+  const incomingStream = await streamFromCh(streamName, pickUpFrom);
+  const outputName = `${outputDir}/${randomUUIDv7()}.json`;
+  await writeStreamToFile(incomingStream, outputName);
+  await uploadToS3(outputName, streamName);
+  await cleanupOldFiles(outputDir, streamName);
 }
 
 await captureStream(streamName);
