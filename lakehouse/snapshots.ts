@@ -75,7 +75,7 @@ async function main(streamPath: string) {
       single: true,
     },
   ];
-//TODO: export from duckdb to local filesystem and then use bun's s3 client to upload to s3
+  //TODO: export from duckdb to local filesystem and then use bun's s3 client to upload to s3
   //one file
   for (const file of fileTypes.filter((f) => f.single)) {
     console.log("Exporting single file", file.description);

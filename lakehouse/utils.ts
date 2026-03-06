@@ -1,6 +1,4 @@
-import {DuckDBConnection} from "@duckdb/node-api";
-import lakehouseEventsSql from "./lakehouse_events.sql";
-import {saveAndCloseLakehouse} from "./connection.ts";
+import { DuckDBConnection } from "@duckdb/node-api";
 
 export const streams = [
   "companies",
@@ -25,19 +23,19 @@ export const makeError = (code: number, message: string) =>
  * @param {string} sql - A string containing one or more SQL statements separated by semicolons.
  * @return {Promise<void>} A promise that resolves once all SQL statements have been executed.
  */
-export async function executeSql(duckdbConnection: DuckDBConnection, sql: string){
+export async function executeSql(duckdbConnection: DuckDBConnection, sql: string): Promise<void> {
   const statements = sql.split(";");
-  for(const statement of statements) {
-    try{
-      const label = statement.trim().split('\n')[0].trim().slice(0, 40)
-      console.time('Execute SQL statement: ' + label);
+  for (const statement of statements) {
+    try {
+      const label = statement.trim().split("\n")[0].trim().slice(0, 40);
+      console.time("Execute SQL statement: " + label);
       const res = await duckdbConnection.runAndReadAll(statement + ";");
-      console.timeEnd('Execute SQL statement: ' + label);
-      if(res.rowsChanged) console.log('Rows changed:', res.rowsChanged)
-      if(res.getRowObjects().length > 0) {
+      console.timeEnd("Execute SQL statement: " + label);
+      if (res.rowsChanged) console.log("Rows changed:", res.rowsChanged);
+      if (res.getRowObjects().length > 0) {
         console.log("Result:", res.getRowObjects());
       }
-    }catch (e) {
+    } catch (e) {
       console.error("Error executing SQL statement:", statement, "Error:", e);
       throw e;
     }

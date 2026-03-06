@@ -35,9 +35,9 @@ CREATE SECRET lakehouse (
   if (await tempDbFile.exists()) {
     console.log("using existing local lakehouse catalogue", tempDbFile.name);
   } else if (await catalogueDbFile.exists()) {
-    console.time("downloaded lakehouse catalogue to "+ tempDbFile.name)
+    console.time("downloaded lakehouse catalogue to " + tempDbFile.name);
     await tempDbFile.write(await catalogueDbFile.bytes());
-    console.timeEnd("downloaded lakehouse catalogue to "+ tempDbFile.name)
+    console.timeEnd("downloaded lakehouse catalogue to " + tempDbFile.name);
   } else {
     console.log("no lakehouse catalogue found, creating one.");
   }
