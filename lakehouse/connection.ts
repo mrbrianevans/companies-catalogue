@@ -48,25 +48,45 @@ CREATE SECRET lakehouse (
 }
 
 export async function saveAndCloseLakehouse({
-  connection,
-  tempDbFile,
-  remoteCataloguePath,
-  deleteLocal = true,
-}: {
+                                              connection,
+                                              tempDbFile,
+                                              remoteCataloguePath,
+                                              deleteLocal = true,
+                                            }: {
   connection: DuckDBConnection;
   tempDbFile: Bun.BunFile;
   remoteCataloguePath: string;
   deleteLocal?: boolean;
 }) {
+  console.log("[saveAndCloseLakehouse] Starting save and close process");
+  console.log("[saveAndCloseLakehouse] tempDbFile:", tempDbFile.name);
+  console.log("[saveAndCloseLakehouse] remoteCataloguePath:", remoteCataloguePath);
+  console.log("[saveAndCloseLakehouse] deleteLocal:", deleteLocal);
+
+  console.log("[saveAndCloseLakehouse] Attaching :memory: as memory_db");
   await connection.run(`
     ATTACH ':memory:' AS memory_db;
     USE memory_db;
     `);
-  await connection.run("DETACH lakehouse;");
+  console.log("[saveAndCloseLakehouse] Successfully attached and switched to memory_db");
 
+  console.log("[saveAndCloseLakehouse] Detaching lakehouse");
+  await connection.run("DETACH lakehouse;");
+  console.log("[saveAndCloseLakehouse] Successfully detached lakehouse");
+
+  console.log("[saveAndCloseLakehouse] Starting catalogue upload");
   console.time("uploaded lakehouse catalogue back to" + remoteCataloguePath);
   await lakeBucket.write(remoteCataloguePath, tempDbFile);
   console.timeEnd("uploaded lakehouse catalogue back to" + remoteCataloguePath);
+  console.log("[saveAndCloseLakehouse] Successfully uploaded catalogue");
 
-  if (deleteLocal) await tempDbFile.delete();
+  if (deleteLocal) {
+    console.log("[saveAndCloseLakehouse] Deleting local tempDbFile");
+    await tempDbFile.delete();
+    console.log("[saveAndCloseLakehouse] Successfully deleted local tempDbFile");
+  } else {
+    console.log("[saveAndCloseLakehouse] Skipping local file deletion (deleteLocal=false)");
+  }
+
+  console.log("[saveAndCloseLakehouse] Completed save and close process");
 }
