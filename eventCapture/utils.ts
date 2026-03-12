@@ -65,7 +65,9 @@ export async function getLastJsonLine(filePath: string): Promise<Record<string, 
 export async function writeStreamToFile(stream: AsyncIterable<Buffer>, filename: string) {
   // duckdb ignores extra newlines caused by heart beats, so they don't need to be filtered out
   const outputStream = createWriteStream(filename);
-  await pipeline(Readable.from(stream), outputStream);
+  await pipeline(Readable.from(stream), outputStream).catch((e) =>
+    console.error("Error writing stream to file", filename, e.toString()),
+  );
   const { bytesWritten } = outputStream;
   console.log("Wrote", bytesWritten, "bytes to file", filename);
 }

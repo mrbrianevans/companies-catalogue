@@ -21,11 +21,11 @@ export const makeError = (code: number, message: string) =>
  *
  * @param {DuckDBConnection} duckdbConnection - The active DuckDB connection to execute the SQL statements on.
  * @param {string} sql - A string containing one or more SQL statements separated by semicolons.
- * @return {Promise<void>} A promise that resolves once all SQL statements have been executed.
  */
 export async function executeSql(duckdbConnection: DuckDBConnection, sql: string): Promise<void> {
   const statements = sql.split(";");
   for (const statement of statements) {
+    if (!statement.trim()) continue;
     try {
       const label = statement.trim().split("\n")[0].trim().slice(0, 40);
       console.time("Execute SQL statement: " + label);
