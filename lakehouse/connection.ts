@@ -80,14 +80,20 @@ export async function saveAndCloseLakehouse({
     console.log("[saveAndCloseLakehouse] Closed duckdb connection successfully");
   }
 
-  const finalBytes = await tempDbFile.bytes();
+  tempDbFile = Bun.file(tempDbFile.name); //refresh reference to local file. after duckdb releases its handle.
+
+  console.log("tempdb file size:", tempDbFile.size);
+  const finalBytes = await tempDbFile.arrayBuffer();
+  console.log("finalBytes size:", finalBytes.byteLength);
   console.log("[saveAndCloseLakehouse] Bytes copied to memory");
 
-  console.log("[saveAndCloseLakehouse] Starting catalogue upload");
-  console.time("uploaded lakehouse catalogue back to" + remoteCataloguePath);
-  await lakeBucket.write(remoteCataloguePath, finalBytes);
-  console.timeEnd("uploaded lakehouse catalogue back to" + remoteCataloguePath);
-  console.log("[saveAndCloseLakehouse] Successfully uploaded catalogue");
+  if (finalBytes.byteLength > 0) {
+    console.log("[saveAndCloseLakehouse] Starting catalogue upload");
+    console.time("uploaded lakehouse catalogue back to" + remoteCataloguePath);
+    await lakeBucket.write(remoteCataloguePath, finalBytes);
+    console.timeEnd("uploaded lakehouse catalogue back to" + remoteCataloguePath);
+    console.log("[saveAndCloseLakehouse] Successfully uploaded catalogue");
+  }
 
   if (deleteLocal) {
     console.log("[saveAndCloseLakehouse] Deleting local tempDbFile");
