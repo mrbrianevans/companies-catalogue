@@ -33,7 +33,7 @@ async function main(streamPath: string) {
     WHERE file NOT IN (SELECT file FROM cc_metadata.loaded_files))`);
     const files = filesRemaining.getRowObjects()[0].files as DuckDBListValue;
     if (!files?.items?.length) break;
-    console.log("Files remaining", files.items);
+    console.log("Files remaining", files.items.length);
     console.time("load events");
     await executeSql(connection, lakehouseEventsSql);
     console.timeEnd("load events");
@@ -41,7 +41,7 @@ async function main(streamPath: string) {
 
   console.log("Merging any unmerged events into the snapshot");
   console.time("merge snapshot");
-  await connection.run(lakehouseSnapshotSql);
+  await executeSql(connection, lakehouseSnapshotSql);
   console.timeEnd("merge snapshot");
 
   await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath });

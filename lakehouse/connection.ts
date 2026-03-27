@@ -58,50 +58,31 @@ export async function saveAndCloseLakehouse({
   remoteCataloguePath: string;
   deleteLocal?: boolean;
 }) {
-  console.log("[saveAndCloseLakehouse] Starting save and close process");
-  console.log("[saveAndCloseLakehouse] tempDbFile:", tempDbFile.name);
-  console.log("[saveAndCloseLakehouse] remoteCataloguePath:", remoteCataloguePath);
-  console.log("[saveAndCloseLakehouse] deleteLocal:", deleteLocal);
-
-  console.log("[saveAndCloseLakehouse] Attaching :memory: as memory_db");
   await connection.run(`
     ATTACH ':memory:' AS memory_db;
     USE memory_db;
     `);
-  console.log("[saveAndCloseLakehouse] Successfully attached and switched to memory_db");
-
-  console.log("[saveAndCloseLakehouse] Detaching lakehouse");
   await connection.run("DETACH lakehouse;");
-  console.log("[saveAndCloseLakehouse] Successfully detached lakehouse");
 
   if (deleteLocal) {
-    console.log("[saveAndCloseLakehouse] Closing duckdb connection");
     connection.closeSync();
-    console.log("[saveAndCloseLakehouse] Closed duckdb connection successfully");
   }
 
   tempDbFile = Bun.file(tempDbFile.name); //refresh reference to local file. after duckdb releases its handle.
 
   console.log("tempdb file size:", tempDbFile.size);
   const finalBytes = await tempDbFile.arrayBuffer();
-  console.log("finalBytes size:", finalBytes.byteLength);
-  console.log("[saveAndCloseLakehouse] Bytes copied to memory");
 
   if (finalBytes.byteLength > 0) {
-    console.log("[saveAndCloseLakehouse] Starting catalogue upload");
     console.time("uploaded lakehouse catalogue back to" + remoteCataloguePath);
     await lakeBucket.write(remoteCataloguePath, finalBytes);
     console.timeEnd("uploaded lakehouse catalogue back to" + remoteCataloguePath);
-    console.log("[saveAndCloseLakehouse] Successfully uploaded catalogue");
   }
 
   if (deleteLocal) {
-    console.log("[saveAndCloseLakehouse] Deleting local tempDbFile");
     await tempDbFile.delete();
     console.log("[saveAndCloseLakehouse] Successfully deleted local tempDbFile");
   } else {
     console.log("[saveAndCloseLakehouse] Skipping local file deletion (deleteLocal=false)");
   }
-
-  console.log("[saveAndCloseLakehouse] Completed save and close process");
 }
