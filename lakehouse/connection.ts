@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 
 const lakeBucket = new S3Client({ bucket: process.env.LAKE_BUCKET });
 
-export async function setupLakehouseConnection() {
-  const tmpDbFilepath = tmpdir() + `/${randomUUIDv7()}_catalogue.ducklake`;
+export async function setupLakehouseConnection(existingPath?: string) {
+  const tmpDbFilepath = existingPath ?? tmpdir() + `/${randomUUIDv7()}_catalogue.ducklake`;
   const tempDbFile = Bun.file(tmpDbFilepath);
   const db = await DuckDBInstance.create(":memory:");
   const connection = await db.connect();
@@ -32,9 +32,12 @@ CREATE SECRET lakehouse (
 
   const remoteCataloguePath = "catalogue.ducklake";
   const catalogueDbFile = lakeBucket.file(remoteCataloguePath);
-  if (await catalogueDbFile.exists()) {
+  if (await tempDbFile.exists()) {
+    console.log("using existing local lakehouse catalogue", tempDbFile.name);
+  } else if (await catalogueDbFile.exists()) {
+    console.time("downloaded lakehouse catalogue to " + tempDbFile.name);
     await tempDbFile.write(await catalogueDbFile.bytes());
-    console.log("downloaded lakehouse catalogue to", tempDbFile.name);
+    console.timeEnd("downloaded lakehouse catalogue to " + tempDbFile.name);
   } else {
     console.log("no lakehouse catalogue found, creating one.");
   }
@@ -48,23 +51,38 @@ export async function saveAndCloseLakehouse({
   connection,
   tempDbFile,
   remoteCataloguePath,
-  detach = true,
+  deleteLocal = true,
 }: {
   connection: DuckDBConnection;
   tempDbFile: Bun.BunFile;
   remoteCataloguePath: string;
-  detach?: boolean;
+  deleteLocal?: boolean;
 }) {
-  if (detach) {
-    await connection.run(`
+  await connection.run(`
     ATTACH ':memory:' AS memory_db;
     USE memory_db;
     `);
-    await connection.run("DETACH lakehouse;");
+  await connection.run("DETACH lakehouse;");
+
+  if (deleteLocal) {
+    connection.closeSync();
   }
 
-  await lakeBucket.write(remoteCataloguePath, tempDbFile);
-  console.log("uploaded lakehouse catalogue back to", remoteCataloguePath);
+  tempDbFile = Bun.file(tempDbFile.name); //refresh reference to local file. after duckdb releases its handle.
 
-  if (detach) await tempDbFile.delete();
+  console.log("tempdb file size:", tempDbFile.size);
+  const finalBytes = await tempDbFile.arrayBuffer();
+
+  if (finalBytes.byteLength > 0) {
+    console.time("uploaded lakehouse catalogue back to" + remoteCataloguePath);
+    await lakeBucket.write(remoteCataloguePath, finalBytes);
+    console.timeEnd("uploaded lakehouse catalogue back to" + remoteCataloguePath);
+  }
+
+  if (deleteLocal) {
+    await tempDbFile.delete();
+    console.log("[saveAndCloseLakehouse] Successfully deleted local tempDbFile");
+  } else {
+    console.log("[saveAndCloseLakehouse] Skipping local file deletion (deleteLocal=false)");
+  }
 }

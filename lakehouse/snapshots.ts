@@ -75,7 +75,7 @@ async function main(streamPath: string) {
       single: true,
     },
   ];
-
+  //TODO: export from duckdb to local filesystem and then use bun's s3 client to upload to s3
   //one file
   for (const file of fileTypes.filter((f) => f.single)) {
     console.log("Exporting single file", file.description);
@@ -100,7 +100,12 @@ async function main(streamPath: string) {
   // split files
   const fileSizeBytes = 128 * 1024 * 1024;
   for (const f of fileTypes.filter((f) => f.split)) {
-    console.log("Exporting split files", f.description, fileSizeBytes / 1024 / 1024, "MB max file size");
+    console.log(
+      "Exporting split files",
+      f.description,
+      fileSizeBytes / 1024 / 1024,
+      "MB max file size",
+    );
     //TODO: clean out existing files from path in bucket in case snapshot size decreases and leaves an old partition. (low risk)
     console.time("export split " + f.extension);
     const filesRes = await connection.runAndReadAll(`

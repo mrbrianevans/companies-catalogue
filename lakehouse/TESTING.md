@@ -8,30 +8,9 @@ New S3 bucket for storing test results, and previous testing progress (to avoid 
 
 ## JSON sink tests
 
-Narrow down a time range to test to avoid loads of historical events.
-
-```sql
-CREATE OR REPLACE TABLE checks AS (
-SELECT filename, MIN(event.timepoint) AS min, MAX(event.timepoint) AS max, COUNT(*) as count
-FROM 's3://companies-stream-sink/persons-with-significant-control/019aa*.json.gz'
-GROUP BY filename
-);
-```
-
-```sql
-SELECT * EXCLUDE COUNT, count as countDiff, max - min + 1 AS diff, diff = countDiff as correct, countDiff - diff as extra
-FROM checks WHERE correct = false ORDER BY min ASC;
-```
-
-Checks the integrity of each file to ensure number of events matches the difference between max and min timepoints.
-
-Can then also check the integrity of a range of files.
-
-```sql
-SELECT min(min) as tmin, max(max) as tmax, sum(count) as tcount, tmax-tmin+1 as diff, tcount-diff as extra FROM checks;
-```
-
-Also check that a file has been uploaded within the last 24/48 hours.
+- tests the 5 most recent files
+- checks data freshness (event published in latest 48 hours)
+- checks contiguous timepoints in each file and across all 5 files
 
 ## Events lakehouse tests
 
