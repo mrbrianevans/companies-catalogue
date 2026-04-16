@@ -38,7 +38,7 @@ export async function updateIndex(dbConn: DuckDBConnection) {
     console.timeEnd("update index");
   } else {
     console.log("No new files to index");
-    const res = await dbConn.runAndReadAll(`
+    const indexRes = await dbConn.runAndReadAll(`
             SELECT stream, COUNT(*) as file_count 
             FROM files
             GROUP BY stream
@@ -46,7 +46,7 @@ export async function updateIndex(dbConn: DuckDBConnection) {
     `);
     console.log(
       "Index contains",
-      res.getRowObjects().map((f) => `\n${f.stream}: ${f.file_count}`),
+      indexRes.getRowObjects().map((f) => `\n${f.stream}: ${f.file_count}`),
     );
   }
 }

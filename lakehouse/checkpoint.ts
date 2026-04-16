@@ -55,16 +55,21 @@ async function main() {
   {
     // run CHECKPOINT on the catalogue database itself.
     const db = await DuckDBInstance.create(":memory:");
-    const connection = await db.connect();
+    const newConn = await db.connect();
     console.time("checkpoint catalogue");
     // could possibly attach to __ducklake_metadata
-    await connection.run(`
+    await newConn.run(`
     ATTACH '${tempDbFile.name}' AS lakehouse;
     USE lakehouse;
     CHECKPOINT;
     `);
     console.timeEnd("checkpoint catalogue");
-    await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath, deleteLocal: true });
+    await saveAndCloseLakehouse({
+      connection: newConn,
+      tempDbFile,
+      remoteCataloguePath,
+      deleteLocal: true,
+    });
   }
 }
 
