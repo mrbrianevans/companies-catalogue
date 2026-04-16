@@ -13,10 +13,11 @@ Connect to stream, pipe to a local json file sink.
 Upload sink files to S3 bucket.
 */
 
-const streamName = process.argv[2];
-if (!streamName) throw new Error("No stream name provided. Usage bun captureStream [officers]");
+const inputStreamName = process.argv[2];
+if (!inputStreamName)
+  throw new Error("No stream name provided. Usage bun captureStream [officers]");
 
-const outputDir = `output/${streamName}`;
+const outputDir = `output/${inputStreamName}`;
 await mkdir(outputDir, { recursive: true });
 console.log(new Date(), "Output directory", outputDir);
 
@@ -30,4 +31,4 @@ async function captureStream(streamName: string) {
   await cleanupOldFiles(outputDir, streamName);
 }
 
-await captureStream(streamName);
+await captureStream(inputStreamName);

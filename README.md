@@ -17,5 +17,6 @@ To run these scripts, you need to have the following environment variables set:
 - `S3_SECRET_ACCESS_KEY`: Your AWS secret access key.
 - `SINK_BUCKET`: The name of the S3 bucket where you want to store the `.json.gz` files.
 - `LAKE_BUCKET`: The name of the S3 bucket where you want to store the parquet files of the ducklake.
-- `SNAPSHOT_BUCKET`: The name of the S3 bucket where you want to store the output snapshots.
+- `SNAPSHOT_BUCKET`: The name of the S3 bucket where you want to store the output snapshot metadata and samples.
+- `PRIVATE_SNAPSHOT_BUCKET`: A private bucket for large snapshot bulk files.
 - `STREAM_KEY`: The API key for Companies House streaming API.
