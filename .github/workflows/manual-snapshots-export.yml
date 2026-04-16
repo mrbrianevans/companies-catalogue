@@ -45,4 +45,4 @@ jobs:
         env:
           LAKE_BUCKET: ${{ github.ref == 'refs/heads/master' && 'companies-stream-lake' || 'dev-companies-stream-lake' }}
           SNAPSHOT_BUCKET: ${{ github.ref == 'refs/heads/master' && 'companies-stream-snapshots' || 'dev-companies-stream-snapshots' }}
-          PRIVATE_SNAPSHOT_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-snapshots-private' || 'dev-companies-stream-snapshots-private' }}
+          PRIVATE_SNAPSHOT_BUCKET: ${{ github.ref == 'refs/heads/master' && 'companies-stream-snapshots-private' || 'dev-companies-stream-snapshots-private' }}
