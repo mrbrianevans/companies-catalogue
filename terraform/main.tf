@@ -5,7 +5,7 @@ resource "aws_s3_bucket" "stream_snapshots" {
   force_destroy = false
   cors_rule {
     allowed_methods = ["GET", "HEAD"]
-    allowed_origins = ["http://localhost:5173", "https://companies-catalogue.co.uk"]
+    allowed_origins = ["http://localhost:5173", "https://companies-catalogue.co.uk", "https://companies.stream"]
   }
 }
 
