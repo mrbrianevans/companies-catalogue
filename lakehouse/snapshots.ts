@@ -86,7 +86,7 @@ async function main(streamPath: string) {
       compression: "snappy",
       extension: ".parquet",
       description: "Parquet",
-      split: true,
+      split: false,
       sample: false,
       single: false,
     },
