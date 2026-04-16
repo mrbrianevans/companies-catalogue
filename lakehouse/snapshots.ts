@@ -2,20 +2,54 @@
 
 import { streams } from "./utils.js";
 import { setupLakehouseConnection } from "./connection.js";
-import { DuckDBListValue } from "@duckdb/node-api";
+import { DuckDBListValue, DuckDBResultReader } from "@duckdb/node-api";
+import { tmpdir } from "node:os";
+import { randomUUIDv7 } from "bun";
+import { basename } from "node:path";
+import { mkdir } from "fs/promises";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 
 const snapshotBucket = process.env.SNAPSHOT_BUCKET;
+const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
+
+async function uploadLocalFiles(filesRes: DuckDBResultReader, file, prefix: string = "") {
+  const outputs = [];
+  for (const outputFileBatch of filesRes.getRowObjects()) {
+    const actualOutputNames = [];
+    for (const outputFile of (outputFileBatch.Files as DuckDBListValue).items as string[]) {
+      const localFile = Bun.file(outputFile);
+      const actualFilename = basename(outputFile);
+      console.log("Uploading", actualFilename, "to S3");
+      await Bun.s3.write(prefix + actualFilename, localFile, {
+        bucket: privateSnapshotBucket,
+        type: file.contentType,
+        contentEncoding: file.contentEncoding,
+        contentDisposition: `attachment; filename="${actualFilename}"`,
+      });
+      actualOutputNames.push(prefix + actualFilename);
+    }
+    outputs.push({
+      files: actualOutputNames,
+      count: Number(outputFileBatch.Count),
+      ...file,
+    });
+  }
+  return outputs;
+}
 
 async function main(streamPath: string) {
   if (!streams.includes(streamPath)) {
     console.log("stream", streamPath, "not in streams list, skipping");
     return;
   }
-  console.log("Exporting", streamPath, "snapshots");
+  const productionDatetime = new Date().toISOString();
+  const productionDate = productionDatetime.split("T")[0];
+  console.log("Exporting", streamPath, "snapshots on date", productionDate);
   console.time("setup local catalogue");
-  const { connection } = await setupLakehouseConnection();
+  const { connection } = await setupLakehouseConnection(
+    "C:\\Users\\bme\\AppData\\Local\\Temp/019d9721-4e00-7000-b5a6-294dd1be7c20_catalogue.ducklake",
+  );
   console.timeEnd("setup local catalogue");
 
   await connection.run(`USE lakehouse.${getSchema(streamPath)};`);
@@ -53,7 +87,7 @@ async function main(streamPath: string) {
       extension: ".parquet",
       description: "Parquet",
       split: true,
-      sample: true,
+      sample: false,
       single: false,
     },
     {
@@ -73,60 +107,54 @@ async function main(streamPath: string) {
       split: false,
       sample: true,
       single: true,
+      contentType: "application/json",
+      contentEncoding: "zstd",
     },
   ];
-  //TODO: export from duckdb to local filesystem and then use bun's s3 client to upload to s3
+  // export from duckdb to local filesystem and then use bun's s3 client to upload to s3
+  const outputDir = tmpdir() + "/companies-catalogue/" + randomUUIDv7() + "/" + streamPath;
+  console.log("Exporting to local directory", outputDir);
+  await mkdir(outputDir, { recursive: true });
   //one file
   for (const file of fileTypes.filter((f) => f.single)) {
+    const outFileName = `${streamPath}_${productionDate}${file.extension}`;
     console.log("Exporting single file", file.description);
     console.time("export " + file.extension);
     const filesRes = await connection.runAndReadAll(`
         COPY (FROM local.${getSchema(streamPath)}.snapshot) 
-        TO 's3://${snapshotBucket}/${streamPath}${file.extension}'
+        TO '${outputDir}/${outFileName}'
         (FORMAT ${file.format}, COMPRESSION ${file.compression}, RETURN_FILES true);
         `);
     console.timeEnd("export " + file.extension);
-    outputFiles.push(
-      ...filesRes.getRowObjects().map((fileRow) => ({
-        files: (fileRow.Files as DuckDBListValue).items.map((fullName) =>
-          (fullName as string).replace(`s3://${snapshotBucket}`, ""),
-        ),
-        count: Number(fileRow.Count),
-        ...file,
-      })),
-    );
+
+    const outputs = await uploadLocalFiles(filesRes, file);
+    outputFiles.push(...outputs);
   }
 
   // split files
   const fileSizeBytes = 128 * 1024 * 1024;
-  for (const f of fileTypes.filter((f) => f.split)) {
+  for (const f of fileTypes.filter((fileType) => fileType.split)) {
+    const outFilePrefix = `${streamPath}_${productionDate}`;
     console.log(
       "Exporting split files",
       f.description,
       fileSizeBytes / 1024 / 1024,
       "MB max file size",
     );
-    //TODO: clean out existing files from path in bucket in case snapshot size decreases and leaves an old partition. (low risk)
     console.time("export split " + f.extension);
     const filesRes = await connection.runAndReadAll(`
             COPY (FROM local.${getSchema(streamPath)}.snapshot)
-            TO 's3://${snapshotBucket}/split/${streamPath}'
+            TO '${outputDir}/${outFilePrefix}'
             (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}', RETURN_FILES true);
             `);
     console.timeEnd("export split " + f.extension);
-    outputFiles.push(
-      ...filesRes.getRowObjects().map((fileRow) => ({
-        files: (fileRow.Files as DuckDBListValue).items.map((file) =>
-          (file as string).replace(`s3://${snapshotBucket}`, ""),
-        ),
-        count: Number(fileRow.Count),
-        ...f,
-      })),
-    );
+
+    const outputs = await uploadLocalFiles(filesRes, f, "split/");
+    outputFiles.push(...outputs);
   }
 
-  //sample of 1000 items
-  for (const f of fileTypes.filter((f) => f.sample)) {
+  //sample of 1000 items in public bucket
+  for (const f of fileTypes.filter((fileType) => fileType.sample)) {
     console.time("export sample " + f.extension);
     const filesRes = await connection.runAndReadAll(`
             COPY (FROM local.${getSchema(streamPath)}.snapshot USING SAMPLE 1000) 
@@ -161,7 +189,7 @@ async function main(streamPath: string) {
 
   const manifest = {
     streamPath,
-    snapshotPublishedAt: new Date().toISOString(),
+    snapshotPublishedAt: productionDatetime,
     ...metadataRow,
     downloads: outputFiles,
   };
