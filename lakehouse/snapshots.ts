@@ -33,21 +33,27 @@ async function uploadLocalFiles(
   const outputs = [];
   for (const outputFileBatch of filesRes.getRowObjects()) {
     const actualOutputNames = [];
+    let totalSize = 0;
     for (const outputFile of (outputFileBatch.Files as DuckDBListValue).items as string[]) {
       const localFile = Bun.file(outputFile);
       const actualFilename = basename(outputFile);
       console.log("Uploading", actualFilename, "to S3");
       await Bun.s3.write(prefix + actualFilename, localFile, {
         bucket,
-        type: file.contentType,
+        type: file.contentType ?? localFile.type,
         contentEncoding: file.contentEncoding,
         contentDisposition: `attachment; filename="${actualFilename}"`,
       });
+      await localFile.bytes(); // read before measuring size
+      console.log("exists", await localFile.exists());
+      console.log("Local size:", localFile.size, "B", localFile.name);
+      totalSize += localFile.size;
       actualOutputNames.push(prefix + actualFilename);
     }
     outputs.push({
       files: actualOutputNames,
       count: Number(outputFileBatch.Count),
+      totalSizeBytes: totalSize,
       format: file.format,
       extension: file.extension,
       compression: file.compression,
@@ -159,6 +165,8 @@ async function main(streamPath: string) {
 
   // split files
   const fileSizeBytes = 128 * 1024 * 1024;
+  const splitOutDir = `${outputDir}/split`;
+  await mkdir(splitOutDir, { recursive: true });
   for (const f of fileTypes.filter((fileType) => fileType.split)) {
     const outFilePrefix = `${streamPath}_${productionDate}`;
     console.log(
@@ -170,7 +178,7 @@ async function main(streamPath: string) {
     console.time("export split " + f.extension);
     const filesRes = await connection.runAndReadAll(`
             COPY (FROM local.${getSchema(streamPath)}.snapshot)
-            TO '${outputDir}/${outFilePrefix}'
+            TO '${splitOutDir}/${outFilePrefix}'
             (FORMAT ${f.format}, OVERWRITE_OR_IGNORE true, COMPRESSION ${f.compression}, FILE_SIZE_BYTES ${fileSizeBytes}, FILENAME_PATTERN '${streamPath}_part_{i}', RETURN_FILES true);
             `);
     console.timeEnd("export split " + f.extension);
@@ -186,16 +194,24 @@ async function main(streamPath: string) {
   }
 
   //sample of 1000 items in public bucket
+  const sampleOutDir = `${outputDir}/sample`;
+  await mkdir(sampleOutDir, { recursive: true });
   for (const f of fileTypes.filter((fileType) => fileType.sample)) {
     console.time("export sample " + f.extension);
     const filesRes = await connection.runAndReadAll(`
             COPY (FROM local.${getSchema(streamPath)}.snapshot USING SAMPLE 1000) 
-            TO 's3://${snapshotBucket}/sample/${streamPath}${f.extension}'
+            TO '${sampleOutDir}/${streamPath}${f.extension}'
             (FORMAT ${f.format}, COMPRESSION ${f.compression}, RETURN_FILES true);
             `);
     console.timeEnd("export sample " + f.extension);
 
-    const outputs = await uploadLocalFiles(filesRes, f, "split/", { sample: true }, snapshotBucket);
+    const outputs = await uploadLocalFiles(
+      filesRes,
+      f,
+      "sample/",
+      { sample: true },
+      snapshotBucket,
+    );
     outputFiles.push(...outputs);
   }
 
