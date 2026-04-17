@@ -44,9 +44,7 @@ async function uploadLocalFiles(
         contentEncoding: file.contentEncoding,
         contentDisposition: `attachment; filename="${actualFilename}"`,
       });
-      await localFile.bytes(); // read before measuring size
-      console.log("exists", await localFile.exists());
-      console.log("Local size:", localFile.size, "B", localFile.name);
+      console.log(actualFilename, "File size:", localFile.size.toLocaleString(), "B");
       totalSize += localFile.size;
       actualOutputNames.push(prefix + actualFilename);
     }
