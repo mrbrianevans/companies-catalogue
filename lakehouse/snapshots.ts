@@ -12,8 +12,24 @@ const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, 
 
 const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
-
-async function uploadLocalFiles(filesRes: DuckDBResultReader, file, prefix: string = "") {
+type FileConfig = {
+  format: string;
+  compression: string;
+  extension: string;
+  description: string;
+  split: boolean;
+  sample: boolean;
+  single: boolean;
+  contentType?: string;
+  contentEncoding?: string;
+};
+async function uploadLocalFiles(
+  filesRes: DuckDBResultReader,
+  file: FileConfig,
+  prefix: string,
+  metadata: Record<string, any> = {},
+  bucket: string,
+) {
   const outputs = [];
   for (const outputFileBatch of filesRes.getRowObjects()) {
     const actualOutputNames = [];
@@ -22,7 +38,7 @@ async function uploadLocalFiles(filesRes: DuckDBResultReader, file, prefix: stri
       const actualFilename = basename(outputFile);
       console.log("Uploading", actualFilename, "to S3");
       await Bun.s3.write(prefix + actualFilename, localFile, {
-        bucket: privateSnapshotBucket,
+        bucket,
         type: file.contentType,
         contentEncoding: file.contentEncoding,
         contentDisposition: `attachment; filename="${actualFilename}"`,
@@ -32,7 +48,11 @@ async function uploadLocalFiles(filesRes: DuckDBResultReader, file, prefix: stri
     outputs.push({
       files: actualOutputNames,
       count: Number(outputFileBatch.Count),
-      ...file,
+      format: file.format,
+      extension: file.extension,
+      compression: file.compression,
+      description: file.description,
+      ...metadata,
     });
   }
   return outputs;
@@ -71,7 +91,7 @@ async function main(streamPath: string) {
   await connection.run(`SET preserve_insertion_order = false;`);
   const outputFiles = [];
   // export local snapshot to various formats on S3
-  const fileTypes = [
+  const fileTypes: FileConfig[] = [
     {
       format: "json",
       compression: "none",
@@ -127,7 +147,13 @@ async function main(streamPath: string) {
         `);
     console.timeEnd("export " + file.extension);
 
-    const outputs = await uploadLocalFiles(filesRes, file);
+    const outputs = await uploadLocalFiles(
+      filesRes,
+      file,
+      "",
+      { single: true },
+      privateSnapshotBucket,
+    );
     outputFiles.push(...outputs);
   }
 
@@ -149,7 +175,13 @@ async function main(streamPath: string) {
             `);
     console.timeEnd("export split " + f.extension);
 
-    const outputs = await uploadLocalFiles(filesRes, f, "split/");
+    const outputs = await uploadLocalFiles(
+      filesRes,
+      f,
+      "split/",
+      { split: true },
+      privateSnapshotBucket,
+    );
     outputFiles.push(...outputs);
   }
 
@@ -162,15 +194,9 @@ async function main(streamPath: string) {
             (FORMAT ${f.format}, COMPRESSION ${f.compression}, RETURN_FILES true);
             `);
     console.timeEnd("export sample " + f.extension);
-    outputFiles.push(
-      ...filesRes.getRowObjects().map((fileRow) => ({
-        files: (fileRow.Files as DuckDBListValue).items.map((file) =>
-          (file as string).replace(`s3://${snapshotBucket}`, ""),
-        ),
-        count: Number(fileRow.Count),
-        ...f,
-      })),
-    );
+
+    const outputs = await uploadLocalFiles(filesRes, f, "split/", { sample: true }, snapshotBucket);
+    outputFiles.push(...outputs);
   }
 
   console.log("Exported files", JSON.stringify(outputFiles));
