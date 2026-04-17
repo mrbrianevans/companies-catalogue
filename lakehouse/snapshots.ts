@@ -73,9 +73,7 @@ async function main(streamPath: string) {
   const productionDate = productionDatetime.split("T")[0];
   console.log("Exporting", streamPath, "snapshots on date", productionDate);
   console.time("setup local catalogue");
-  const { connection } = await setupLakehouseConnection(
-    "C:\\Users\\bme\\AppData\\Local\\Temp/019d9721-4e00-7000-b5a6-294dd1be7c20_catalogue.ducklake",
-  );
+  const { connection } = await setupLakehouseConnection();
   console.timeEnd("setup local catalogue");
 
   await connection.run(`USE lakehouse.${getSchema(streamPath)};`);
