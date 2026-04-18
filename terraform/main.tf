@@ -6,7 +6,7 @@ resource "aws_s3_bucket" "stream_snapshots" {
   cors_rule {
     allowed_methods = ["GET", "HEAD"]
     allowed_origins = [
-      "http://localhost:5173", "https://companies-catalogue.co.uk", "https://www.companies-catalogue.co.uk",
+      "http://localhost:5173", "https://companiescatalogue.co.uk", "https://www.companiescatalogue.co.uk",
       "https://companies.stream", "https://companies-snapshots.vercel.app", "https://dev.companiescatalogue.co.uk"
     ]
   }
