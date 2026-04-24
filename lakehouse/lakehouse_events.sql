@@ -15,9 +15,9 @@ INSERT INTO events BY NAME
             (FROM read_json(getvariable('files'), columns = {resource_kind : 'VARCHAR',
     resource_id : 'VARCHAR',
     resource_uri : 'VARCHAR',
-    DATA : 'JSON',
+    data : 'JSON',
     event : 'STRUCT(timepoint BIGINT, published_at VARCHAR, type VARCHAR)'}, auto_detect = FALSE)
-    WHERE event.timepoint IS NOT NULL AND event.timepoint > (SELECT COALESCE(MAX(inner_events.event.timepoint), 0) FROM events inner_events)
+    WHERE event.timepoint IS NOT NULL
     );
 
 INSERT INTO cc_metadata.loaded_files

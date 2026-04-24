@@ -22,6 +22,7 @@ WITH new_events AS
     (SELECT *
      FROM EVENTS
      WHERE event.timepoint > getvariable('latest_timepoint')
+    ORDER BY event.timepoint ASC
     LIMIT 1000000) ,
     latest AS
    (SELECT resource_uri,
