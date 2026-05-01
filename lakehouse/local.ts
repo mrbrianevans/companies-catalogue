@@ -4,7 +4,7 @@ import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 
 async function main() {
-  const { connection, tempDbFile, remoteCataloguePath } = await setupLakehouseConnection();
+  const { connection } = await setupLakehouseConnection();
 
   const streamPath = "persons-with-significant-control-statements";
   await connection.run(`USE lakehouse.${getSchema(streamPath)};`);
@@ -22,7 +22,7 @@ async function main() {
   console.log("Row count", row.count, "distinct timepoints", row.distinct_timepoints);
 
   if (process.argv.includes("--save")) {
-    await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath });
+    await saveAndCloseLakehouse({ connection });
   }
 }
 

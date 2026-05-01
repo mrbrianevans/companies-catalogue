@@ -20,3 +20,8 @@ To run these scripts, you need to have the following environment variables set:
 - `SNAPSHOT_BUCKET`: The name of the S3 bucket where you want to store the output snapshot metadata and samples.
 - `PRIVATE_SNAPSHOT_BUCKET`: A private bucket for large snapshot bulk files.
 - `STREAM_KEY`: The API key for Companies House streaming API.
+- `PGPASSWORD`: PostgreSQL password
+- `PGHOST`: PostgreSQL host
+- `PGUSER`: PostgreSQL username
+- `PGDATABASE`: PostgreSQL database name
+- `PGPORT`: PostgreSQL port

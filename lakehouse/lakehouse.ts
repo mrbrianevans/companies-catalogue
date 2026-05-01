@@ -17,7 +17,7 @@ async function main(streamPath: string) {
     return;
   }
   console.log("Loading", streamPath, "into lakehouse");
-  const { connection, tempDbFile, remoteCataloguePath } = await setupLakehouseConnection();
+  const { connection } = await setupLakehouseConnection();
   await connection.run(`CREATE SCHEMA IF NOT EXISTS lakehouse.${getSchema(streamPath)};`);
   await connection.run(`USE lakehouse.${getSchema(streamPath)};`);
   await connection.run(`SET VARIABLE SINK_BUCKET = '${process.env.SINK_BUCKET}';`);
@@ -44,7 +44,7 @@ async function main(streamPath: string) {
   await executeSql(connection, lakehouseSnapshotSql);
   console.timeEnd("merge snapshot");
 
-  await saveAndCloseLakehouse({ connection, tempDbFile, remoteCataloguePath });
+  await saveAndCloseLakehouse({ connection });
 }
 
 await main(process.argv[2]);
