@@ -1,6 +1,7 @@
 # Postgres Catalogue for lakehouse
 
 Connection from duckdb:
+
 ```sql
 CREATE OR REPLACE PERSISTENT SECRET (
     TYPE postgres,
@@ -21,21 +22,25 @@ CREATE or replace persistent SECRET dev_postgres_lake (
 ```
 
 Connect to postgres itself:
+
 ```sql
 attach 'dbname=cc_dev' as postgres (type postgres);
 ```
+
 Connect to the ducklake in postgres:
+
 ```sql
 ATTACH 'ducklake:dev_postgres_lake' AS ducklake (automatic_migration false);
 ```
 
-
 ## Copy catalogue from duckdb to postgres
+
 Start with an in-memory duckdb instance:
+
 ```sql
 attach 'catalogue.ducklake' as catalogue;
 attach 'dbname=cc_dev' as postgres (type postgres);
-       
+
 use catalogue;
 export database 'catalogue_ex' (format parquet);
 use postgres.ducklake;
@@ -44,6 +49,7 @@ show tables;
 ```
 
 ## Once setup, future connections
+
 ```sql
 ATTACH 'ducklake:dev_postgres_lake' AS ducklake;
 use ducklake.cc_metadata;
