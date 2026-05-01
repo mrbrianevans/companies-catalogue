@@ -10,6 +10,10 @@ env:
   S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
   STREAM_KEY: ${{ secrets.STREAM_KEY }}
+  PGPASSWORD: ${{ secrets.PGPASSWORD }}
+  PGHOST: ${{ secrets.PGHOST }}
+  PGUSER: ${{ secrets.PGHOST }}
+  PGPORT: ${{ secrets.PGPORT }}
 
 concurrency: lakehouse
 
@@ -93,6 +97,7 @@ jobs:
         env:
           SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
           LAKE_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-lake' || 'dev-companies-stream-lake' }}
+          PGDATABASE: ${{ matrix.branch == 'master' && 'cc_prod' || 'cc_dev' }}
 
   export-snapshots:
     needs: load-lakehouse
@@ -135,3 +140,4 @@ jobs:
           LAKE_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-lake' || 'dev-companies-stream-lake' }}
           SNAPSHOT_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-snapshots' || 'dev-companies-stream-snapshots' }}
           PRIVATE_SNAPSHOT_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-snapshots-private' || 'dev-companies-stream-snapshots-private' }}
+          PGDATABASE: ${{ matrix.branch == 'master' && 'cc_prod' || 'cc_dev' }}

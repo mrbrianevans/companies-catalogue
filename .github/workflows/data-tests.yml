@@ -9,6 +9,10 @@ env:
   S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
   S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
+  PGPASSWORD: ${{ secrets.PGPASSWORD }}
+  PGHOST: ${{ secrets.PGHOST }}
+  PGUSER: ${{ secrets.PGHOST }}
+  PGPORT: ${{ secrets.PGPORT }}
 
 jobs:
   test-sink:
@@ -90,3 +94,4 @@ jobs:
         env:
           SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
           LAKE_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-lake' || 'dev-companies-stream-lake' }}
+          PGDATABASE: ${{ matrix.branch == 'master' && 'cc_prod' || 'cc_dev' }}
