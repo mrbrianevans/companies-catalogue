@@ -27,7 +27,7 @@ env:
   PGPASSWORD: ${{ secrets.PGPASSWORD }}
   PGHOST: ${{ secrets.PGHOST }}
   PGUSER: ${{ secrets.PGHOST }}
-  PGPORT: ${{ secrets.PGPORT }}
+  PGPORT: ${{ vars.PGPORT }}
 
 jobs:
   export-snapshots:
