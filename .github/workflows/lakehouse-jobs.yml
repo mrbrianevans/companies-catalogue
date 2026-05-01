@@ -12,7 +12,7 @@ env:
   STREAM_KEY: ${{ secrets.STREAM_KEY }}
   PGPASSWORD: ${{ secrets.PGPASSWORD }}
   PGHOST: ${{ secrets.PGHOST }}
-  PGUSER: ${{ secrets.PGHOST }}
+  PGUSER: ${{ secrets.PGUSER }}
   PGPORT: ${{ vars.PGPORT }}
 
 concurrency: lakehouse

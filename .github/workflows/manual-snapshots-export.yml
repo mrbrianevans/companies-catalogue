@@ -26,7 +26,7 @@ env:
   S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
   PGPASSWORD: ${{ secrets.PGPASSWORD }}
   PGHOST: ${{ secrets.PGHOST }}
-  PGUSER: ${{ secrets.PGHOST }}
+  PGUSER: ${{ secrets.PGUSER }}
   PGPORT: ${{ vars.PGPORT }}
 
 jobs:
