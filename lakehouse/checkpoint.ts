@@ -23,11 +23,11 @@ async function main() {
   );
   console.timeEnd("non-destructive operations");
 
-    // operations that destroy old parquet files
-    console.time("destructive operations");
-    await executeSql(
-      connection,
-      `
+  // operations that destroy old parquet files
+  console.time("destructive operations");
+  await executeSql(
+    connection,
+    `
     CALL ducklake_cleanup_old_files(
         'lakehouse',
         cleanup_all => true
@@ -37,12 +37,11 @@ async function main() {
         older_than => now() - INTERVAL '1 week'
     );
     `,
-    );
-    console.timeEnd("destructive operations");
+  );
+  console.timeEnd("destructive operations");
 
-    // save catalogue again. less important this time.
-    await saveAndCloseLakehouse({ connection });
-
+  // save catalogue again. less important this time.
+  await saveAndCloseLakehouse({ connection });
 }
 
 await main();

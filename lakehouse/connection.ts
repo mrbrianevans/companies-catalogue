@@ -30,16 +30,14 @@ CREATE SECRET lakehouse (
 );
 `);
 
-  await connection.run(`ATTACH 'ducklake:lakehouse' AS lakehouse (CREATE_IF_NOT_EXISTS true);`);
+  await connection.run(
+    `ATTACH 'ducklake:lakehouse' AS lakehouse (CREATE_IF_NOT_EXISTS true, DATA_INLINING_ROW_LIMIT 0);`,
+  );
   await connection.run(`USE lakehouse;`);
   return { connection };
 }
 
-export async function saveAndCloseLakehouse({
-  connection
-}: {
-  connection: DuckDBConnection;
-}) {
+export async function saveAndCloseLakehouse({ connection }: { connection: DuckDBConnection }) {
   await connection.run(`
     ATTACH ':memory:' AS memory_db;
     USE memory_db;
