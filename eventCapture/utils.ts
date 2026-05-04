@@ -125,13 +125,19 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
     get(options, (res) => {
       if (res.statusCode === 200) {
         console.log(new Date(), "Connected to stream", streamPath);
-        //TODO: would be good to only self kill when mass data stops coming through.
-        // so if there isn't much data waiting, the crawl is faster.
-        // but if there's loads it could take longer than a minute.
-        setTimeout(
-          () => res.destroy(new Error("self-terminated connection after some time")),
-          60_000,
+        // default timeout of a few minutes, if no data is received.
+        let timeout = setTimeout(
+          () => res.destroy(new Error("self-terminated connection after no data")),
+          240_000,
         );
+        res.on("data", () => {
+          // kill if no data for x seconds
+          clearTimeout(timeout);
+          timeout = setTimeout(
+            () => res.destroy(new Error("self-terminated connection after some time")),
+            10_000,
+          );
+        });
         resolve(res);
       } else reject(new Error(`Failed to connect to stream: ${res.statusCode}`));
     }).end(),
