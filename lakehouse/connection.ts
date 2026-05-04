@@ -31,11 +31,9 @@ CREATE SECRET lakehouse (
 `);
 
   await connection.run(
-      `ATTACH 'ducklake:lakehouse' AS lakehouse (CREATE_IF_NOT_EXISTS true, DATA_INLINING_ROW_LIMIT 0);`,
+    `ATTACH 'ducklake:lakehouse' AS lakehouse (CREATE_IF_NOT_EXISTS true, DATA_INLINING_ROW_LIMIT 0);`,
   );
-  await connection.run(
-      `ATTACH '' AS catalogue (TYPE postgres);`,
-  );
+  await connection.run(`ATTACH '' AS catalogue (TYPE postgres);`);
   await connection.run(`USE lakehouse;`);
   return { connection };
 }
