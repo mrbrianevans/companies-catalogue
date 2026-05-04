@@ -3,7 +3,8 @@ import { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 export async function setupLakehouseConnection() {
   const db = await DuckDBInstance.create(":memory:");
   const connection = await db.connect();
-  await connection.run("SET threads = 3;");
+  await connection.run("SET threads = 4;");
+  await connection.run("SET memory_limit = '12GB';");
   await connection.run(`
 INSTALL httpfs;
 LOAD httpfs;
