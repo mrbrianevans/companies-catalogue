@@ -1,3 +1,4 @@
+-- incremental update to snapshots. is actually worse performance than complete rebuild.
 -- duckdb script to:
   -- 1) download latest snapshot from lakehouse table to a local_db table
   -- 2) update the local_db table with any new events since the last snapshot

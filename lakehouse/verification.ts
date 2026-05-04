@@ -68,6 +68,18 @@ async function main(streamPath: string) {
     throw new Error("Latest event published more than 48 hours ago");
   }
 
+  // check data for nulls
+  const lakehouseDataNullsRes = await connection.runAndReadAll(`
+        SELECT COUNT(*) as count
+        FROM events
+        WHERE data is null and event.type != 'deleted';
+    `);
+  const lakehouseDataNulls = lakehouseDataNullsRes.getRowObjects()[0].count as bigint;
+  console.log("Found", lakehouseDataNulls, "non-delete events with null data");
+  if (lakehouseDataNulls > 0n) {
+    throw new Error("Null data found in events");
+  }
+
   console.log("All tests passed.");
   connection.closeSync();
 }

@@ -3,7 +3,8 @@ import { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 export async function setupLakehouseConnection() {
   const db = await DuckDBInstance.create(":memory:");
   const connection = await db.connect();
-  await connection.run("SET threads = 1;");
+  await connection.run("SET threads = 4;");
+  await connection.run("SET memory_limit = '12GB';");
   await connection.run(`
 INSTALL httpfs;
 LOAD httpfs;
@@ -33,6 +34,7 @@ CREATE SECRET lakehouse (
   await connection.run(
     `ATTACH 'ducklake:lakehouse' AS lakehouse (CREATE_IF_NOT_EXISTS true, DATA_INLINING_ROW_LIMIT 0);`,
   );
+  await connection.run(`ATTACH '' AS catalogue (TYPE postgres);`);
   await connection.run(`USE lakehouse;`);
   return { connection };
 }

@@ -20,9 +20,11 @@ CREATE TABLE IF NOT EXISTS events
 ) );
 CREATE TABLE IF NOT EXISTS snapshot AS FROM events WITH NO DATA;
 
-CREATE SCHEMA IF NOT EXISTS cc_metadata;
+-- sorted table
+ALTER TABLE events SET SORTED BY (struct_extract(event, 'timepoint') ASC);
+ALTER TABLE snapshot RESET SORTED BY;
 
-CREATE TABLE IF NOT EXISTS cc_metadata.loaded_files
+CREATE TABLE IF NOT EXISTS catalogue.cc_metadata.loaded_files
 (
     file
         VARCHAR
