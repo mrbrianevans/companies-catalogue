@@ -30,7 +30,7 @@ async function main(streamPath: string) {
   while (true) {
     const filesRemaining = await connection.runAndReadAll(`SELECT list(file) as files FROM
     (FROM glob('s3://'||getvariable('SINK_BUCKET')||'/'||getvariable('streamPath')||'/*.json.gz')
-    WHERE file NOT IN (SELECT file FROM cc_metadata.loaded_files))`);
+    WHERE file NOT IN (SELECT file FROM catalogue.cc_metadata.loaded_files))`);
     const files = filesRemaining.getRowObjects()[0].files as DuckDBListValue;
     if (!files?.items?.length) break;
     console.log("Files remaining", files.items.length);

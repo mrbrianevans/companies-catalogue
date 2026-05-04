@@ -52,5 +52,5 @@ show tables;
 
 ```sql
 ATTACH 'ducklake:dev_postgres_lake' AS ducklake;
-use ducklake.cc_metadata;
+use ducklake.companies;
 ```

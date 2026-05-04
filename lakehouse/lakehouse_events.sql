@@ -2,13 +2,10 @@
 SET
 VARIABLE files = (SELECT list(file) FROM
 (FROM glob('s3://'||getvariable('SINK_BUCKET')||'/'||getvariable('streamPath')||'/*.json.gz')
-WHERE file NOT IN (SELECT file FROM cc_metadata.loaded_files)
+WHERE file NOT IN (SELECT file FROM catalogue.cc_metadata.loaded_files)
 ORDER BY file ASC
 LIMIT 1));
 SELECT getvariable('files');
-
-BEGIN
-TRANSACTION;
 
 -- Only works if there is at least one file to load. Can't load null list.
 INSERT INTO events BY NAME
@@ -20,7 +17,5 @@ INSERT INTO events BY NAME
     WHERE event.timepoint IS NOT NULL
     );
 
-INSERT INTO cc_metadata.loaded_files
+INSERT INTO catalogue.cc_metadata.loaded_files
 FROM UNNEST(getvariable('files'));
-
-COMMIT;

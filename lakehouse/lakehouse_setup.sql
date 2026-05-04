@@ -20,9 +20,7 @@ CREATE TABLE IF NOT EXISTS events
 ) );
 CREATE TABLE IF NOT EXISTS snapshot AS FROM events WITH NO DATA;
 
-CREATE SCHEMA IF NOT EXISTS cc_metadata;
-
-CREATE TABLE IF NOT EXISTS cc_metadata.loaded_files
+CREATE TABLE IF NOT EXISTS catalogue.cc_metadata.loaded_files
 (
     file
         VARCHAR
