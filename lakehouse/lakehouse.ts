@@ -4,7 +4,7 @@
 import { executeSql, streams } from "./utils.js";
 import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
 
-import lakehouseSnapshotSql from "./lakehouse_snapshot.sql" with { type: "text" };
+import lakehouseSnapshotSql from "./rebuild_snapshot.sql" with { type: "text" };
 import lakehouseEventsSql from "./lakehouse_events.sql" with { type: "text" };
 import lakehouseSetupSql from "./lakehouse_setup.sql" with { type: "text" };
 import { DuckDBListValue } from "@duckdb/node-api";
