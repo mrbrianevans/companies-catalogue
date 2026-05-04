@@ -27,7 +27,7 @@ export async function executeSql(duckdbConnection: DuckDBConnection, sql: string
   for (const statement of statements) {
     if (!statement.trim()) continue;
     try {
-      const label = statement.trim().split("\n")[0].trim().slice(0, 40);
+      const label = statement.replaceAll(/(--.*)?\n+\s*/g, " ").trim().slice(0, 40);
       console.time("Execute SQL statement: " + label);
       const res = await duckdbConnection.runAndReadAll(statement + ";");
       console.timeEnd("Execute SQL statement: " + label);
