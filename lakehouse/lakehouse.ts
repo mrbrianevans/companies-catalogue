@@ -1,10 +1,8 @@
 // This is to move events from the lake (.json.gz) to a Ducklake (parquet lakehouse with metadata)
-// Ducklake catalog is frozen on S3.
 
 import { executeSql, streams } from "./utils.js";
 import { saveAndCloseLakehouse, setupLakehouseConnection } from "./connection.js";
 
-import lakehouseSnapshotSql from "./rebuild_snapshot.sql" with { type: "text" };
 import lakehouseEventsSql from "./lakehouse_events.sql" with { type: "text" };
 import lakehouseSetupSql from "./lakehouse_setup.sql" with { type: "text" };
 import { DuckDBListValue } from "@duckdb/node-api";
@@ -40,11 +38,6 @@ async function main(streamPath: string) {
     await executeSql(connection, lakehouseEventsSql);
     console.timeEnd("load events");
   }
-
-  console.log("Merging any unmerged events into the snapshot");
-  console.time("merge snapshot");
-  await executeSql(connection, lakehouseSnapshotSql);
-  console.timeEnd("merge snapshot");
 
   await saveAndCloseLakehouse({ connection });
 }
