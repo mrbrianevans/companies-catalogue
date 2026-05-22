@@ -1,0 +1,10 @@
+[project]
+name = "xbrl"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.43.9",
+    "stream-read-xbrl>=0.1.2",
+]
