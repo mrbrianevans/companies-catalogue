@@ -81,16 +81,20 @@ async function main(streamPath: string) {
   console.log("tables in lakehouse", tables);
 
   await connection.run(`ATTACH 'temp.db' as local;`);
+  await connection.run(`SET preserve_insertion_order = false;`);
   await connection.run(`CREATE SCHEMA IF NOT EXISTS local.${getSchema(streamPath)};`);
 
   console.time("create local snapshot from lakehouse");
   await connection.run(`
     CREATE OR REPLACE TABLE local.${getSchema(streamPath)}.snapshot AS 
-    SELECT * FROM lakehouse.${getSchema(streamPath)}.snapshot;
+    SELECT * FROM lakehouse.${getSchema(streamPath)}.events
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY resource_uri
+        ORDER BY event.timepoint DESC
+    ) = 1 and event.type != 'deleted';
     `);
   console.timeEnd("create local snapshot from lakehouse");
 
-  await connection.run(`SET preserve_insertion_order = false;`);
   const outputFiles = [];
   // export local snapshot to various formats on S3
   const fileTypes: FileConfig[] = [
