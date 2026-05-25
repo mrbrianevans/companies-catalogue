@@ -2,16 +2,23 @@
 
 import { type FileConfig, streams, uploadLocalFiles } from "./utils.js";
 import { setupLakehouseConnection } from "./connection.js";
-import { DuckDBListValue, DuckDBResultReader } from "@duckdb/node-api";
 import { tmpdir } from "node:os";
 import { randomUUIDv7 } from "bun";
-import { basename } from "node:path";
 import { mkdir } from "fs/promises";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 
 const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
+
+// filter out dissolved companies, resigned officers, ceased PSCs, etc
+const deleteConditions: Record<string, string> = {
+  companies: `data.date_of_cessation is null and data.company_status != 'dissolved'`,
+  officers: `data.resigned_on is null`,
+  "persons-with-significant-control": `data.ceased_on is null`,
+  charges: "status != 'fully-satisfied'",
+  "persons-with-significant-control-statements": `data.ceased_on is null`,
+};
 
 async function main(streamPath: string) {
   if (!streams.includes(streamPath)) {
@@ -36,14 +43,13 @@ async function main(streamPath: string) {
   await connection.run(`CREATE SCHEMA IF NOT EXISTS local.${getSchema(streamPath)};`);
 
   console.time("create local snapshot from lakehouse");
-  //TODO: filter out dissolved companies, resigned officers, ceased PSCs, expired disqualifications etc
   await connection.run(`
     CREATE OR REPLACE TABLE local.${getSchema(streamPath)}.snapshot AS 
     SELECT * FROM lakehouse.${getSchema(streamPath)}.events
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY resource_uri
         ORDER BY event.timepoint DESC
-    ) = 1 and event.type != 'deleted';
+    ) = 1 and event.type != 'deleted' and ${deleteConditions[streamPath] ?? "true"};
     `);
   console.timeEnd("create local snapshot from lakehouse");
 
