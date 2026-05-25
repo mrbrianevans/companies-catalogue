@@ -24,7 +24,7 @@ async function main(streamPath: string) {
   await connection.run(`SET VARIABLE streamPath = '${streamPath}';`);
 
   const setupScript = streamPath === "xbrl" ? lakehouseSetupXbrlSql : lakehouseSetupSql;
-  const fileExtension = streamPath === "xbrl" ? '.csv' : '.json.gz';
+  const fileExtension = streamPath === "xbrl" ? ".csv" : ".json.gz";
   const lakehouseSql = streamPath === "xbrl" ? lakehouseXbrlSql : lakehouseEventsSql;
 
   console.time("setup lakehouse");
