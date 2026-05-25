@@ -143,6 +143,7 @@ jobs:
           PRIVATE_SNAPSHOT_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-snapshots-private' || 'dev-companies-stream-snapshots-private' }}
           PGDATABASE: ${{ matrix.branch == 'master' && 'cc_prod' || 'cc_dev' }}
   capture-xbrl-csv:
+    timeout-minutes: 1080
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
