@@ -1,6 +1,6 @@
 // Export snapshots from the datalake for convenient download
 
-import { streams } from "./utils.js";
+import { type FileConfig, streams, uploadLocalFiles } from "./utils.js";
 import { setupLakehouseConnection } from "./connection.js";
 import { DuckDBListValue, DuckDBResultReader } from "@duckdb/node-api";
 import { tmpdir } from "node:os";
@@ -12,55 +12,6 @@ const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, 
 
 const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
-type FileConfig = {
-  format: string;
-  compression: string;
-  extension: string;
-  description: string;
-  split: boolean;
-  sample: boolean;
-  single: boolean;
-  contentType?: string;
-  contentEncoding?: string;
-};
-async function uploadLocalFiles(
-  filesRes: DuckDBResultReader,
-  file: FileConfig,
-  prefix: string,
-  metadata: Record<string, any> = {},
-  bucket: string,
-) {
-  const outputs = [];
-  for (const outputFileBatch of filesRes.getRowObjects()) {
-    const actualOutputNames = [];
-    let totalSize = 0;
-    for (const outputFile of (outputFileBatch.Files as DuckDBListValue).items as string[]) {
-      const localFile = Bun.file(outputFile);
-      const actualFilename = basename(outputFile);
-      console.log("Uploading", actualFilename, "to S3");
-      await Bun.s3.write(prefix + actualFilename, localFile, {
-        bucket,
-        type: file.contentType ?? localFile.type,
-        contentEncoding: file.contentEncoding,
-        contentDisposition: `attachment; filename="${actualFilename}"`,
-      });
-      console.log(actualFilename, "File size:", localFile.size.toLocaleString(), "B");
-      totalSize += localFile.size;
-      actualOutputNames.push(prefix + actualFilename);
-    }
-    outputs.push({
-      files: actualOutputNames,
-      count: Number(outputFileBatch.Count),
-      totalSizeBytes: totalSize,
-      format: file.format,
-      extension: file.extension,
-      compression: file.compression,
-      description: file.description,
-      ...metadata,
-    });
-  }
-  return outputs;
-}
 
 async function main(streamPath: string) {
   if (!streams.includes(streamPath)) {
@@ -85,6 +36,7 @@ async function main(streamPath: string) {
   await connection.run(`CREATE SCHEMA IF NOT EXISTS local.${getSchema(streamPath)};`);
 
   console.time("create local snapshot from lakehouse");
+  //TODO: filter out dissolved companies, resigned officers, ceased PSCs, expired disqualifications etc
   await connection.run(`
     CREATE OR REPLACE TABLE local.${getSchema(streamPath)}.snapshot AS 
     SELECT * FROM lakehouse.${getSchema(streamPath)}.events
