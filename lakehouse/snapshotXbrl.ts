@@ -130,7 +130,7 @@ async function snapshotXbrl() {
     },
     "xbrl/",
     { fullHistory: true },
-    snapshotBucket,
+    privateSnapshotBucket,
   );
   outputFiles.push(...fullHistoryOutputs);
 
