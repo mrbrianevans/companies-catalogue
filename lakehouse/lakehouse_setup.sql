@@ -27,3 +27,4 @@ CREATE TABLE IF NOT EXISTS catalogue.cc_metadata.loaded_files
     file
         VARCHAR
 );
+
