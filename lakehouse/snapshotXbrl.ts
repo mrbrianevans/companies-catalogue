@@ -76,7 +76,7 @@ async function snapshotXbrl() {
       contentType: "text/csv",
       contentEncoding: "zstd",
     },
-    "xbrl/",
+    "monthly/",
     { lastTwoYears: true },
     snapshotBucket,
   );
@@ -102,7 +102,7 @@ async function snapshotXbrl() {
       single: true,
       split: false,
     },
-    "xbrl/",
+    "monthly/",
     { lastTwoYears: true },
     snapshotBucket,
   );
@@ -128,7 +128,7 @@ async function snapshotXbrl() {
       single: true,
       split: false,
     },
-    "xbrl/",
+    "monthly/",
     { fullHistory: true },
     privateSnapshotBucket,
   );

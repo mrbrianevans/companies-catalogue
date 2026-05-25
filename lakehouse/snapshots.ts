@@ -114,7 +114,7 @@ async function main(streamPath: string) {
     const outputs = await uploadLocalFiles(
       filesRes,
       file,
-      "",
+      "daily/",
       { single: true },
       privateSnapshotBucket,
     );
@@ -144,7 +144,7 @@ async function main(streamPath: string) {
     const outputs = await uploadLocalFiles(
       filesRes,
       f,
-      "split/",
+      "daily/split/",
       { split: true },
       privateSnapshotBucket,
     );
