@@ -13,7 +13,7 @@ const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
 
 // filter out dissolved companies, resigned officers, ceased PSCs, etc
 const deleteConditions: Record<string, string> = {
-  companies: `data.date_of_cessation is null and data.company_status != 'dissolved'`,
+  companies: `data.date_of_cessation is null and data.company_status != '"dissolved"'`,
   officers: `data.resigned_on is null`,
   "persons-with-significant-control": `data.ceased_on is null`,
   charges: "status != 'fully-satisfied'",
