@@ -23,8 +23,17 @@ resource "aws_s3_bucket" "private_snapshots" {
   lifecycle_rule {
     id      = "Delete after 3 days"
     enabled = true
+    prefix  = "daily/"
     expiration {
       days = 3
+    }
+  }
+  lifecycle_rule {
+    id      = "Delete XBRL files after 30 days"
+    enabled = true
+    prefix  = "monthly/"
+    expiration {
+      days = 33
     }
   }
 }
