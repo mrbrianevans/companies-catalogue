@@ -120,7 +120,6 @@ jobs:
             "insolvency-cases",
             "company-exemptions",
             "disqualified-officers",
-            "xbrl",
           ]
         branch: [master, dev]
 
