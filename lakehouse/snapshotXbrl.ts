@@ -6,28 +6,16 @@
 
 // full history to private bucket
 
-import { setupLakehouseConnection } from "./connection.ts";
 import { tmpdir } from "node:os";
 import { randomUUIDv7 } from "bun";
 import { mkdir } from "fs/promises";
 import { uploadLocalFiles } from "./utils.ts";
+import type { DuckDBConnection } from "@duckdb/node-api";
 
 const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
 
-async function snapshotXbrl() {
-  const productionDatetime = new Date().toISOString();
-  const productionDate = productionDatetime.split("T")[0];
-  console.log("Exporting", "xbrl snapshots on date", productionDate);
-  console.time("setup local catalogue");
-  const { connection } = await setupLakehouseConnection();
-  console.timeEnd("setup local catalogue");
-
-  await connection.run(`USE lakehouse.xbrl;`);
-
-  await connection.run(`ATTACH 'temp.db' as local;`);
-  await connection.run(`SET preserve_insertion_order = false;`);
-  await connection.run(`CREATE SCHEMA IF NOT EXISTS local.xbrl;`);
+export async function snapshotXbrl(connection: DuckDBConnection, productionDatetime: string) {
   //TODO: refactor to match the structure of the other snapshots (based on an array of file configs) and include samples/split files.
   console.time("create local snapshot from lakehouse");
   await connection.run(`
@@ -146,5 +134,3 @@ async function snapshotXbrl() {
   console.log("Manifest uploaded to S3");
   connection.closeSync();
 }
-
-await snapshotXbrl();

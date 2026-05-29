@@ -5,6 +5,7 @@ import { setupLakehouseConnection } from "./connection.js";
 import { tmpdir } from "node:os";
 import { randomUUIDv7 } from "bun";
 import { mkdir } from "fs/promises";
+import { snapshotXbrl } from "./snapshotXbrl.ts";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 
@@ -21,7 +22,7 @@ const deleteConditions: Record<string, string> = {
 };
 
 async function main(streamPath: string) {
-  if (!streams.includes(streamPath)) {
+  if (!streams.includes(streamPath) && streamPath !== "xbrl") {
     console.log("stream", streamPath, "not in streams list, skipping");
     return;
   }
@@ -41,6 +42,11 @@ async function main(streamPath: string) {
   await connection.run(`ATTACH 'temp.db' as local;`);
   await connection.run(`SET preserve_insertion_order = false;`);
   await connection.run(`CREATE SCHEMA IF NOT EXISTS local.${getSchema(streamPath)};`);
+
+  if (streamPath === "xbrl") {
+    await snapshotXbrl(connection, productionDatetime);
+    return;
+  }
 
   console.time("create local snapshot from lakehouse");
   await connection.run(`
