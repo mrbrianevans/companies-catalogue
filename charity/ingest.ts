@@ -12,12 +12,12 @@ LOAD httpfs;
 INSTALL zipfs FROM community;
 LOAD zipfs;
 `);
-  const entities = ["charity_other_regulators"];
+  const entities = ["charity_other_regulators", "charity"];
   for (const entity of entities) {
     await executeSql(
       connection,
       `
-        CREATE TEMPORARY TABLE ${entity} AS (
+        CREATE OR REPLACE TABLE ${entity} AS (
             SELECT * FROM read_json_objects(
                 'zip://https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.${entity}.zip/publicextract.${entity}.json',
                 format = 'array'
