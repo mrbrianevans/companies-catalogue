@@ -19,6 +19,7 @@ Available from: https://register-of-charities.charitycommission.gov.uk/en/regist
 - charity_trustee
 
 SQL to load a single entity with DuckDB:
+
 ```sql
 INSTALL httpfs;
 LOAD httpfs;
