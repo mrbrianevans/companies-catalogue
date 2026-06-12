@@ -101,7 +101,7 @@ jobs:
           PGDATABASE: ${{ matrix.branch == 'master' && 'cc_prod' || 'cc_dev' }}
 
   export-snapshots:
-    needs: load-lakehouse
+    needs: ["load-lakehouse", "capture-charity"]
     name: Export snapshots
     runs-on: ubuntu-latest
 
@@ -120,6 +120,7 @@ jobs:
             "insolvency-cases",
             "company-exemptions",
             "disqualified-officers",
+            "charity",
           ]
         branch: [master, dev]
 

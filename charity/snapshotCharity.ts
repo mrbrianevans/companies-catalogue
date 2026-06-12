@@ -1,25 +1,25 @@
 import { type FileConfig, uploadLocalFiles } from "../lakehouse/utils.ts";
-import { setupLakehouseConnection } from "../lakehouse/connection.ts";
 import { tmpdir } from "node:os";
 import { randomUUIDv7 } from "bun";
 import { mkdir } from "fs/promises";
+import type { DuckDBConnection } from "@duckdb/node-api";
 
 const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 
 const entities = [
-  // "charity",
-  // "charity_annual_return_history",
-  // "charity_annual_return_parta",
-  // "charity_annual_return_partb",
-  // "charity_area_of_operation",
-  // "charity_classification",
-  // "charity_event_history",
-  // "charity_governing_document",
+  "charity",
+  "charity_annual_return_history",
+  "charity_annual_return_parta",
+  "charity_annual_return_partb",
+  "charity_area_of_operation",
+  "charity_classification",
+  "charity_event_history",
+  "charity_governing_document",
   "charity_other_names",
-  // "charity_other_regulators",
-  // "charity_policy",
-  // "charity_published_report",
-  // "charity_trustee",
+  "charity_other_regulators",
+  "charity_policy",
+  "charity_published_report",
+  "charity_trustee",
 ];
 
 const fileTypes: FileConfig[] = [
@@ -56,25 +56,14 @@ const fileTypes: FileConfig[] = [
   },
 ];
 
-async function main() {
+export async function snapshotCharityData(
+  connection: DuckDBConnection,
+  productionDatetime: string,
+) {
   if (!snapshotBucket) {
     throw new Error("SNAPSHOT_BUCKET environment variable is required");
   }
-  const productionDatetime = new Date().toISOString();
   const productionDate = productionDatetime.split("T")[0];
-  console.log("Exporting charity snapshots on date", productionDate);
-
-  console.time("setup local catalogue");
-  const { connection } = await setupLakehouseConnection();
-  console.timeEnd("setup local catalogue");
-
-  await connection.run(`ATTACH 'temp.db' as local;`);
-  await connection.run(`SET preserve_insertion_order = false;`);
-  await connection.run(`CREATE SCHEMA IF NOT EXISTS local.charity;`);
-
-  const tablesRes = await connection.runAndReadAll(`SHOW TABLES FROM charity;`);
-  const tables = tablesRes.getRowObjects().map((r) => r.name as string);
-  console.log("charity tables in lakehouse", tables);
 
   const outputDir = tmpdir() + "/companies-catalogue/" + randomUUIDv7() + "/charity";
   console.log("Exporting to local directory", outputDir);
@@ -84,11 +73,6 @@ async function main() {
   const tableMetadata: Record<string, any> = {};
 
   for (const entity of entities) {
-    if (!tables.includes(entity)) {
-      console.log("Table", entity, "not found in lakehouse.charity, skipping");
-      continue;
-    }
-
     console.time(`create local copy of ${entity}`);
     await connection.run(`
       CREATE OR REPLACE TABLE local.charity.${entity} AS 
@@ -153,5 +137,3 @@ async function main() {
 
   connection.closeSync();
 }
-
-await main();
