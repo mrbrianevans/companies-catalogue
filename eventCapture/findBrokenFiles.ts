@@ -15,7 +15,7 @@ async function analyseBrokenFile(file: string) {
   const localPath = join(tmpDir, basename(file).replace(/\.gz$/, ""));
   try {
     await downloadFile(file, localPath);
-    return classifyBrokenFile(file, localPath);
+    return await classifyBrokenFile(file, localPath);
   } finally {
     await rm(tmpDir, { recursive: true, force: true });
   }

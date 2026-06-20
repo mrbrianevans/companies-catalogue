@@ -1,17 +1,18 @@
 import { DuckDBConnection } from "@duckdb/node-api";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { getLastJsonLine } from "./utils.ts";
 import {
+  analyseFileLines,
   classifyBrokenFile,
   downloadFile,
   downloadGzFile,
   getAllBucketFiles,
   getFirstJsonLine,
   isValidJsonFile,
-  readFileLines,
   s3KeyFromUri,
+  writeValidLines,
   streamPathFromUri,
   uploadGzFile,
   uploadJsonAsGz,
@@ -88,11 +89,11 @@ async function buildFixedFile(file: string, fixedLocalPath: string) {
   await withTempDir("fixBrokenEndFiles-build-", async (tmpDir) => {
     const originalLocalPath = join(tmpDir, basename(file).replace(/\.gz$/, ""));
     await downloadFile(file, originalLocalPath);
-    const { validLines, report } = await readFileLines(originalLocalPath);
+    const { report } = await analyseFileLines(originalLocalPath);
     if (!report || report.kind !== "broken_at_end") {
       throw new Error(`Expected broken_at_end file: ${file}`);
     }
-    await writeFile(fixedLocalPath, `${validLines.join("\n")}\n`, "utf8");
+    await writeValidLines(originalLocalPath, fixedLocalPath);
   });
 }
 
@@ -162,7 +163,9 @@ async function main(fileUri: string) {
     const allFiles = await getAllBucketFiles(connection, streamPath);
     const nextFile = getNextFile(allFiles, fileUri);
     if (!nextFile) {
-      throw new Error(`Cannot fix ${fileUri}: no following file in bucket to verify timepoint continuity`);
+      throw new Error(
+        `Cannot fix ${fileUri}: no following file in bucket to verify timepoint continuity`,
+      );
     }
 
     const { lastTimepoint, nextTimepoint } = await validateTimepointContinuity(fileUri, nextFile);
