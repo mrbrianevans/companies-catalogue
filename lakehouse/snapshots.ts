@@ -1,69 +1,28 @@
 // Export snapshots from the datalake for convenient download
 
-import { streams } from "./utils.js";
+import { type FileConfig, streams, uploadLocalFiles } from "./utils.js";
 import { setupLakehouseConnection } from "./connection.js";
-import { DuckDBListValue, DuckDBResultReader } from "@duckdb/node-api";
 import { tmpdir } from "node:os";
 import { randomUUIDv7 } from "bun";
-import { basename } from "node:path";
 import { mkdir } from "fs/promises";
+import { snapshotXbrl } from "./snapshotXbrl.ts";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 
 const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
-type FileConfig = {
-  format: string;
-  compression: string;
-  extension: string;
-  description: string;
-  split: boolean;
-  sample: boolean;
-  single: boolean;
-  contentType?: string;
-  contentEncoding?: string;
+
+// filter out dissolved companies, resigned officers, ceased PSCs, etc
+const deleteConditions: Record<string, string> = {
+  companies: `data.date_of_cessation is null and data.company_status != '"dissolved"'`,
+  officers: `data.resigned_on is null`,
+  "persons-with-significant-control": `data.ceased_on is null`,
+  charges: `data.status != '"fully-satisfied"'`,
+  "persons-with-significant-control-statements": `data.ceased_on is null`,
 };
-async function uploadLocalFiles(
-  filesRes: DuckDBResultReader,
-  file: FileConfig,
-  prefix: string,
-  metadata: Record<string, any> = {},
-  bucket: string,
-) {
-  const outputs = [];
-  for (const outputFileBatch of filesRes.getRowObjects()) {
-    const actualOutputNames = [];
-    let totalSize = 0;
-    for (const outputFile of (outputFileBatch.Files as DuckDBListValue).items as string[]) {
-      const localFile = Bun.file(outputFile);
-      const actualFilename = basename(outputFile);
-      console.log("Uploading", actualFilename, "to S3");
-      await Bun.s3.write(prefix + actualFilename, localFile, {
-        bucket,
-        type: file.contentType ?? localFile.type,
-        contentEncoding: file.contentEncoding,
-        contentDisposition: `attachment; filename="${actualFilename}"`,
-      });
-      console.log(actualFilename, "File size:", localFile.size.toLocaleString(), "B");
-      totalSize += localFile.size;
-      actualOutputNames.push(prefix + actualFilename);
-    }
-    outputs.push({
-      files: actualOutputNames,
-      count: Number(outputFileBatch.Count),
-      totalSizeBytes: totalSize,
-      format: file.format,
-      extension: file.extension,
-      compression: file.compression,
-      description: file.description,
-      ...metadata,
-    });
-  }
-  return outputs;
-}
 
 async function main(streamPath: string) {
-  if (!streams.includes(streamPath)) {
+  if (!streams.includes(streamPath) && streamPath !== "xbrl") {
     console.log("stream", streamPath, "not in streams list, skipping");
     return;
   }
@@ -81,16 +40,25 @@ async function main(streamPath: string) {
   console.log("tables in lakehouse", tables);
 
   await connection.run(`ATTACH 'temp.db' as local;`);
+  await connection.run(`SET preserve_insertion_order = false;`);
   await connection.run(`CREATE SCHEMA IF NOT EXISTS local.${getSchema(streamPath)};`);
+
+  if (streamPath === "xbrl") {
+    await snapshotXbrl(connection, productionDatetime);
+    return;
+  }
 
   console.time("create local snapshot from lakehouse");
   await connection.run(`
     CREATE OR REPLACE TABLE local.${getSchema(streamPath)}.snapshot AS 
-    SELECT * FROM lakehouse.${getSchema(streamPath)}.snapshot;
+    SELECT * FROM lakehouse.${getSchema(streamPath)}.events
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY resource_uri
+        ORDER BY event.timepoint DESC
+    ) = 1 and event.type != 'deleted' and ${deleteConditions[streamPath] ?? "true"};
     `);
   console.timeEnd("create local snapshot from lakehouse");
 
-  await connection.run(`SET preserve_insertion_order = false;`);
   const outputFiles = [];
   // export local snapshot to various formats on S3
   const fileTypes: FileConfig[] = [
@@ -152,7 +120,7 @@ async function main(streamPath: string) {
     const outputs = await uploadLocalFiles(
       filesRes,
       file,
-      "",
+      "daily/",
       { single: true },
       privateSnapshotBucket,
     );
@@ -182,7 +150,7 @@ async function main(streamPath: string) {
     const outputs = await uploadLocalFiles(
       filesRes,
       f,
-      "split/",
+      "daily/split/",
       { split: true },
       privateSnapshotBucket,
     );

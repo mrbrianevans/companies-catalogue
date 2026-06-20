@@ -16,6 +16,7 @@ on:
             "insolvency-cases",
             "company-exemptions",
             "disqualified-officers",
+            "xbrl",
           ]
         description: Specify which stream to export a snapshot of
 

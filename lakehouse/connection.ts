@@ -9,6 +9,8 @@ export async function setupLakehouseConnection() {
 INSTALL httpfs;
 LOAD httpfs;
 INSTALL ducklake;
+INSTALL postgres;
+LOAD postgres;
 
 CREATE SECRET s3 (
     TYPE s3,
@@ -18,15 +20,20 @@ CREATE SECRET s3 (
     ENDPOINT '${new URL(process.env.S3_ENDPOINT ?? "").host}'
 );
 
-CREATE SECRET postgres (
-    TYPE postgres
+CREATE SECRET postgres_catalogue (
+    TYPE postgres,
+    HOST '${process.env.PGHOST}',
+    PORT ${process.env.PGPORT},
+    DATABASE ${process.env.PGDATABASE},
+    USER '${process.env.PGUSER}',
+    PASSWORD '${process.env.PGPASSWORD}'
 );
 
 CREATE SECRET lakehouse (
     TYPE ducklake,
     METADATA_PATH '',
     DATA_PATH 's3://${process.env.LAKE_BUCKET}/',
-    METADATA_PARAMETERS MAP {'TYPE': 'postgres'},
+    METADATA_PARAMETERS MAP {'TYPE': 'postgres', 'SECRET': 'postgres_catalogue'},
     METADATA_SCHEMA 'ducklake'
 );
 `);
@@ -34,7 +41,7 @@ CREATE SECRET lakehouse (
   await connection.run(
     `ATTACH 'ducklake:lakehouse' AS lakehouse (CREATE_IF_NOT_EXISTS true, DATA_INLINING_ROW_LIMIT 0);`,
   );
-  await connection.run(`ATTACH '' AS catalogue (TYPE postgres);`);
+  await connection.run(`ATTACH '' AS catalogue (TYPE postgres, SECRET 'postgres_catalogue');`);
   await connection.run(`USE lakehouse;`);
   return { connection };
 }
