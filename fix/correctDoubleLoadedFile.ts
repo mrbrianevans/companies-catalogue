@@ -140,8 +140,7 @@ async function confirmDoubleLoaded(
   }
 
   const fileRange = combinedRange(fileRanges);
-  const rangesMatch =
-    fileRange.min === duplicateRange.min && fileRange.max === duplicateRange.max;
+  const rangesMatch = fileRange.min === duplicateRange.min && fileRange.max === duplicateRange.max;
   if (!rangesMatch) {
     throw new Error(
       `Combined file timepoint range (${formatRange(fileRange)}) does not exactly match the duplicate ` +
@@ -234,9 +233,7 @@ function printCorrectionPlan(plan: CorrectionPlan, dryRun: boolean) {
   const { duplicateRange, files } = plan;
 
   console.log(`\nCorrection plan${dryRun ? " (dry run)" : ""}:`);
-  console.log(
-    `  File${files.length === 1 ? "" : "s"} to unload from metadata (${files.length}):`,
-  );
+  console.log(`  File${files.length === 1 ? "" : "s"} to unload from metadata (${files.length}):`);
   for (const file of files.toSorted((a, b) => a.min - b.min)) {
     console.log(`    ${file.file}`);
   }
@@ -254,7 +251,9 @@ function printCorrectionPlan(plan: CorrectionPlan, dryRun: boolean) {
   console.log(
     `  2. DELETE FROM catalogue.cc_metadata.loaded_files WHERE file IN (${files.length} file${files.length === 1 ? "" : "s"})`,
   );
-  console.log(`  3. Re-run lakehousing to reload ${files.length === 1 ? "the file" : "the files"} once`);
+  console.log(
+    `  3. Re-run lakehousing to reload ${files.length === 1 ? "the file" : "the files"} once`,
+  );
 
   if (dryRun) {
     console.log("\nDry run only — no changes applied. Re-run with --apply to execute.");

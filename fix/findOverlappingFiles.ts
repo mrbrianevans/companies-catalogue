@@ -47,7 +47,10 @@ async function getDuplicateTimepointRange(
   return { min: Number(min), max: Number(max) };
 }
 
-function fileMatchesDuplicateRange(range: FileTimepointRange, duplicateRange: DuplicateTimepointRange) {
+function fileMatchesDuplicateRange(
+  range: FileTimepointRange,
+  duplicateRange: DuplicateTimepointRange,
+) {
   return range.min === duplicateRange.min && range.max === duplicateRange.max;
 }
 
@@ -90,13 +93,18 @@ function reportUnloadedPrecedingSinkFiles(files: string[], latestLoadedFile: str
     return;
   }
 
-  console.log(`  Found ${files.length} file(s) in the sink bucket that are not in cc_metadata.loaded_files:`);
+  console.log(
+    `  Found ${files.length} file(s) in the sink bucket that are not in cc_metadata.loaded_files:`,
+  );
   for (const file of files) {
     console.log(`    ${file}`);
   }
 }
 
-async function getFileMinTimepoint(connection: DuckDBConnection, file: string): Promise<number | undefined> {
+async function getFileMinTimepoint(
+  connection: DuckDBConnection,
+  file: string,
+): Promise<number | undefined> {
   const res = await connection.runAndReadAll(`
     SELECT event.timepoint AS min_timepoint
     FROM read_json('${sqlString(file)}')
@@ -185,9 +193,7 @@ function overlapContainsTimepoint(
   duplicateTimepoint: number,
 ) {
   return (
-    earlier.max >= later.min &&
-    duplicateTimepoint >= later.min &&
-    duplicateTimepoint <= earlier.max
+    earlier.max >= later.min && duplicateTimepoint >= later.min && duplicateTimepoint <= earlier.max
   );
 }
 
@@ -224,14 +230,15 @@ function printBatchRanges(
   for (let i = 0; i < ranges.length; i++) {
     const range = ranges[i]!;
     const overlapsWithPrevious = i > 0 && rangesOverlap(ranges[i - 1]!, range);
-    const containsDuplicate =
-      range.min <= duplicateRange.max && range.max >= duplicateRange.min;
+    const containsDuplicate = range.min <= duplicateRange.max && range.max >= duplicateRange.min;
     const potentiallyLoadedTwice = fileMatchesDuplicateRange(range, duplicateRange);
     const flags = [
       range.index < batchStart ? "preceding context" : null,
       overlapsWithPrevious ? "OVERLAPS previous file" : null,
       containsDuplicate ? "contains duplicate timepoint(s)" : null,
-      potentiallyLoadedTwice ? "POTENTIALLY LOADED TWICE — file min/max exactly matches duplicate range" : null,
+      potentiallyLoadedTwice
+        ? "POTENTIALLY LOADED TWICE — file min/max exactly matches duplicate range"
+        : null,
     ].filter(Boolean);
 
     console.log(`  [${range.index + 1}] ${range.file}`);
@@ -273,8 +280,7 @@ function recommendDeletion(
   const expectedMin = before ? before.max + 1 : earlierOverlap.min;
   const expectedMax = after ? after.min - 1 : laterOverlap.max;
 
-  const earlierFillsGap =
-    earlierOverlap.min === expectedMin && earlierOverlap.max === expectedMax;
+  const earlierFillsGap = earlierOverlap.min === expectedMin && earlierOverlap.max === expectedMax;
   const laterFillsGap = laterOverlap.min === expectedMin && laterOverlap.max === expectedMax;
 
   const laterLooksLikeRecapture = laterOverlap.min <= earlierOverlap.max;
@@ -360,9 +366,15 @@ function printReport(
     `  Expected contiguous range between before/after: ${recommendation.expectedRange.min} – ${recommendation.expectedRange.max}`,
   );
   console.log(`  Likely correct file (keep):\n    ${recommendation.likelyCorrect.file}`);
-  console.log(`    timepoints: ${recommendation.likelyCorrect.min} – ${recommendation.likelyCorrect.max}`);
-  console.log(`  Likely wrong file (delete from sink and lakehouse metadata):\n    ${recommendation.likelyWrong.file}`);
-  console.log(`    timepoints: ${recommendation.likelyWrong.min} – ${recommendation.likelyWrong.max}`);
+  console.log(
+    `    timepoints: ${recommendation.likelyCorrect.min} – ${recommendation.likelyCorrect.max}`,
+  );
+  console.log(
+    `  Likely wrong file (delete from sink and lakehouse metadata):\n    ${recommendation.likelyWrong.file}`,
+  );
+  console.log(
+    `    timepoints: ${recommendation.likelyWrong.min} – ${recommendation.likelyWrong.max}`,
+  );
   console.log(`  Reason: ${recommendation.reason}`);
 }
 
@@ -380,13 +392,17 @@ async function main(streamPath: string) {
 
     const duplicateRange = await getDuplicateTimepointRange(connection);
     if (duplicateRange === undefined) {
-      console.log(`No duplicate timepoints in lakehouse.${getSchema(streamPath)}.events — all good.`);
+      console.log(
+        `No duplicate timepoints in lakehouse.${getSchema(streamPath)}.events — all good.`,
+      );
       return;
     }
 
     const loadedFiles = await getLoadedFiles(connection, streamPath);
     if (loadedFiles.length < 2) {
-      throw new Error(`Need at least two loaded files to diagnose overlap, found ${loadedFiles.length}`);
+      throw new Error(
+        `Need at least two loaded files to diagnose overlap, found ${loadedFiles.length}`,
+      );
     }
 
     console.log(
@@ -410,7 +426,9 @@ async function main(streamPath: string) {
     console.log(
       `\nDuplicate region likely starts around file ${batchStart + 1}; ` +
         `reading full ranges for ${batchFiles.length} file(s)` +
-        (contextStart < batchStart ? ` (including preceding file ${contextStart + 1} for overlap detection)` : "") +
+        (contextStart < batchStart
+          ? ` (including preceding file ${contextStart + 1} for overlap detection)`
+          : "") +
         ".",
     );
 
@@ -456,12 +474,20 @@ async function main(streamPath: string) {
     const [earlierOverlap, laterOverlap] = overlapPair;
     let before = findRangeByIndex(fileRanges, earlierOverlap.index - 1);
     if (!before && earlierOverlap.index > 0) {
-      [before] = await getFileRanges(connection, [loadedFiles[earlierOverlap.index - 1]!], earlierOverlap.index - 1);
+      [before] = await getFileRanges(
+        connection,
+        [loadedFiles[earlierOverlap.index - 1]!],
+        earlierOverlap.index - 1,
+      );
     }
 
     let after = findRangeByIndex(fileRanges, laterOverlap.index + 1);
     if (!after && laterOverlap.index < loadedFiles.length - 1) {
-      [after] = await getFileRanges(connection, [loadedFiles[laterOverlap.index + 1]!], laterOverlap.index + 1);
+      [after] = await getFileRanges(
+        connection,
+        [loadedFiles[laterOverlap.index + 1]!],
+        laterOverlap.index + 1,
+      );
     }
 
     printReport(streamPath, duplicateRange, before, earlierOverlap, laterOverlap, after);

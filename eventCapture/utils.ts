@@ -7,6 +7,7 @@ import { readdir } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
 import { Readable } from "node:stream";
+import split2 from "split2";
 
 export async function getLastJsonLine(filePath: string): Promise<Record<string, any> | undefined> {
   if (!existsSync(filePath)) return undefined;
@@ -125,20 +126,14 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
     get(options, (res) => {
       if (res.statusCode === 200) {
         console.log(new Date(), "Connected to stream", streamPath);
-        // default timeout of a few minutes, if no data is received.
-        let timeout = setTimeout(
-          () => res.destroy(new Error("self-terminated connection after no data")),
-          240_000,
+        // split2 to ensure only complete lines get streamed out
+        const lineStream = res.pipe(split2((line) => line + "\n"));
+        // kill after a few minutes
+        setTimeout(
+          () => lineStream.destroy(new Error("self-terminated connection after no data")),
+          60_000,
         );
-        res.on("data", () => {
-          // kill if no data for x seconds
-          clearTimeout(timeout);
-          timeout = setTimeout(
-            () => res.destroy(new Error("self-terminated connection after some time")),
-            10_000,
-          );
-        });
-        resolve(res);
+        resolve(lineStream);
       } else reject(new Error(`Failed to connect to stream: ${res.statusCode}`));
     }).end(),
   );
