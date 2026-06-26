@@ -18,9 +18,30 @@ const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
 export async function snapshotXbrl(connection: DuckDBConnection, productionDatetime: string) {
   //TODO: refactor to match the structure of the other snapshots (based on an array of file configs) and include samples/split files.
   console.time("create local snapshot from lakehouse");
+  // there can be duplicate data if a daily and monthly file of the same period were ingested
+  /* Inspect overlapping files:
+    SELECT zip_url, zip_start, zip_end, COUNT(*)
+    FROM snapshot
+    WHERE zip_start BETWEEN '2026-04-01' AND '2026-04-05'
+    GROUP BY zip_url, zip_start, zip_end
+    ORDER BY zip_start;
+     */
   await connection.run(`
-    CREATE OR REPLACE TABLE local.xbrl.snapshot AS 
-    SELECT * FROM lakehouse.xbrl.xbrl;
+    CREATE  OR REPLACE TABLE local.xbrl.snapshot AS 
+    WITH non_daily AS (
+    SELECT DISTINCT zip_start, zip_end
+    FROM lakehouse.xbrl.xbrl
+    WHERE zip_url NOT LIKE '%Accounts_Bulk_Data-%'
+)
+    SELECT *
+    FROM lakehouse.xbrl.xbrl d
+    WHERE d.zip_url NOT LIKE '%Accounts_Bulk_Data-%'   -- keep all non-daily
+       OR NOT EXISTS (
+        SELECT 1
+        FROM non_daily m
+        WHERE d.zip_start >= m.zip_start
+          AND d.zip_start <= m.zip_end     -- daily date falls inside monthly range
+    );
     `);
   console.timeEnd("create local snapshot from lakehouse");
 
