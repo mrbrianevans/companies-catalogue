@@ -84,6 +84,7 @@ async function main(streamPath: string) {
       split: false,
       sample: false,
       single: false,
+      contentType: "application/vnd.apache.parquet",
     },
     {
       format: "json",
@@ -93,6 +94,7 @@ async function main(streamPath: string) {
       split: false,
       sample: false,
       single: false,
+      contentType: "application/gzip",
     },
     {
       format: "json",
