@@ -102,8 +102,7 @@ async function main(streamPath: string) {
       split: false,
       sample: true,
       single: true,
-      contentType: "application/json",
-      contentEncoding: "zstd",
+      contentType: "application/zstd",
     },
   ];
   // export from duckdb to local filesystem and then use bun's s3 client to upload to s3
