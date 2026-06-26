@@ -2,7 +2,7 @@ import { DuckDBConnection } from "@duckdb/node-api";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { getLastJsonLine } from "./utils.ts";
+import { getLastJsonLine } from "../eventCapture/utils.ts";
 import {
   analyseFileLines,
   classifyBrokenFile,

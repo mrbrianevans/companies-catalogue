@@ -3,7 +3,7 @@ import { createGzip, createGunzip } from "node:zlib";
 import { createReadStream, createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import split2 from "split2";
-import { s3Client } from "./utils.ts";
+import { s3Client } from "../eventCapture/utils.ts";
 
 type ParsedLineResult =
   | { ok: true; line: string; lineNumber: number }
