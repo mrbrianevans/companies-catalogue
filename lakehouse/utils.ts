@@ -75,6 +75,7 @@ export async function uploadLocalFiles(
       await Bun.s3.write(prefix + actualFilename, localFile, {
         bucket,
         type: file.contentType ?? localFile.type,
+        // Setting content-encoding affects how cloudflare later compresses responses
         contentEncoding: file.contentEncoding,
         contentDisposition: `attachment; filename="${actualFilename}"`,
       });
