@@ -145,6 +145,7 @@ jobs:
   capture-xbrl-csv:
     timeout-minutes: 1080
     runs-on: ubuntu-latest
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -167,6 +168,7 @@ jobs:
 
   capture-charity:
     runs-on: ubuntu-latest
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
