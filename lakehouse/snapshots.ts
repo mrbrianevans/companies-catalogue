@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { randomUUIDv7 } from "bun";
 import { mkdir } from "fs/promises";
 import { snapshotXbrl } from "./snapshotXbrl.ts";
+import { snapshotCharityData } from "../charity/snapshotCharity.ts";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 
@@ -45,6 +46,10 @@ async function main(streamPath: string) {
 
   if (streamPath === "xbrl") {
     await snapshotXbrl(connection, productionDatetime);
+    return;
+  }
+  if (streamPath === "charity") {
+    await snapshotCharityData(connection, productionDatetime);
     return;
   }
 
