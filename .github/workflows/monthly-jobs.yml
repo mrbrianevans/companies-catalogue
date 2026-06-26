@@ -1,0 +1,49 @@
+name: Monthly load jobs
+on:
+  schedule:
+    - cron: "0 4 2 * *"
+  workflow_dispatch:
+
+env:
+  S3_ENDPOINT: ${{ secrets.S3_ENDPOINT || vars.S3_ENDPOINT }}
+  S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+  S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+  S3_REGION: ${{ secrets.S3_REGION || vars.S3_REGION }}
+  STREAM_KEY: ${{ secrets.STREAM_KEY }}
+  PGPASSWORD: ${{ secrets.PGPASSWORD }}
+  PGHOST: ${{ secrets.PGHOST }}
+  PGUSER: ${{ secrets.PGUSER }}
+  PGPORT: ${{ vars.PGPORT }}
+
+concurrency: lakehouse
+
+jobs:
+  xbrl-snapshot:
+    name: XBRL snapshot
+    runs-on: ubuntu-latest
+
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        branch: [master, dev]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Use Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - run: bun snapshots.ts xbrl
+        working-directory: lakehouse
+        env:
+          LAKE_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-lake' || 'dev-companies-stream-lake' }}
+          SNAPSHOT_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-snapshots' || 'dev-companies-stream-snapshots' }}
+          PRIVATE_SNAPSHOT_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-snapshots-private' || 'dev-companies-stream-snapshots-private' }}
+          PGDATABASE: ${{ matrix.branch == 'master' && 'cc_prod' || 'cc_dev' }}
