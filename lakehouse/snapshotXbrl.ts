@@ -19,7 +19,7 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   //TODO: refactor to match the structure of the other snapshots (based on an array of file configs) and include samples/split files.
   console.time("create local snapshot from lakehouse");
   // there can be duplicate data if a daily and monthly file of the same period were ingested
-    /* Inspect overlapping files:
+  /* Inspect overlapping files:
     SELECT zip_url, zip_start, zip_end, COUNT(*)
     FROM snapshot
     WHERE zip_start BETWEEN '2026-04-01' AND '2026-04-05'
