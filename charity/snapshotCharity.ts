@@ -31,6 +31,7 @@ const fileTypes: FileConfig[] = [
     split: false,
     sample: false,
     single: true,
+    contentType: "application/vnd.apache.parquet",
   },
   {
     format: "csv",
@@ -40,8 +41,7 @@ const fileTypes: FileConfig[] = [
     split: false,
     sample: false,
     single: true,
-    contentType: "text/csv",
-    contentEncoding: "zstd",
+    contentType: "application/zstd",
   },
   {
     format: "json",
@@ -51,8 +51,7 @@ const fileTypes: FileConfig[] = [
     split: false,
     sample: false,
     single: true,
-    contentType: "application/json",
-    contentEncoding: "zstd",
+    contentType: "application/zstd",
   },
 ];
 
