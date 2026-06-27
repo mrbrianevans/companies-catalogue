@@ -129,10 +129,11 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
         // split2 to ensure only complete lines get streamed out
         const lineStream = res.pipe(split2((line) => line + "\n"));
         // kill after a few minutes
-        setTimeout(
-          () => lineStream.destroy(new Error("self-terminated connection after no data")),
-          60_000,
-        );
+        setTimeout(() => {
+          console.log(new Date(), "Destroy stream after timeout");
+          lineStream.end();
+          res.destroy();
+        }, 60_000);
         resolve(lineStream);
       } else reject(new Error(`Failed to connect to stream: ${res.statusCode}`));
     }).end(),
