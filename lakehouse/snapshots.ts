@@ -23,7 +23,7 @@ const deleteConditions: Record<string, string> = {
 };
 
 async function main(streamPath: string) {
-  if (!streams.includes(streamPath) && streamPath !== "xbrl") {
+  if (!streams.includes(streamPath) && streamPath !== "xbrl" && streamPath !== "charity") {
     console.log("stream", streamPath, "not in streams list, skipping");
     return;
   }

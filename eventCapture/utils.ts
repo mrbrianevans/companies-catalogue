@@ -7,6 +7,7 @@ import { readdir } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
 import { Readable } from "node:stream";
+import split2 from "split2";
 
 export async function getLastJsonLine(filePath: string): Promise<Record<string, any> | undefined> {
   if (!existsSync(filePath)) return undefined;
@@ -74,7 +75,7 @@ export async function writeStreamToFile(stream: AsyncIterable<Buffer>, filename:
 
 const { S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, SINK_BUCKET } = process.env;
 console.log("S3 Bucket:", SINK_BUCKET);
-const client = new S3Client({
+export const s3Client = new S3Client({
   accessKeyId: S3_ACCESS_KEY_ID,
   secretAccessKey: S3_SECRET_ACCESS_KEY,
   bucket: SINK_BUCKET,
@@ -95,7 +96,7 @@ export async function uploadToS3(file: string, streamName: string) {
     }
   }
   const objectPath = getS3ObjectPath(file, streamName);
-  const s3file = client.file(objectPath);
+  const s3file = s3Client.file(objectPath);
   const writer = s3file.writer();
   const bytesWritten = await pipeline(
     createReadStream(file),
@@ -125,14 +126,15 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
     get(options, (res) => {
       if (res.statusCode === 200) {
         console.log(new Date(), "Connected to stream", streamPath);
-        //TODO: would be good to only self kill when mass data stops coming through.
-        // so if there isn't much data waiting, the crawl is faster.
-        // but if there's loads it could take longer than a minute.
-        setTimeout(
-          () => res.destroy(new Error("self-terminated connection after some time")),
-          60_000,
-        );
-        resolve(res);
+        // split2 to ensure only complete lines get streamed out
+        const lineStream = res.pipe(split2((line) => line + "\n"));
+        // kill after a few minutes
+        setTimeout(() => {
+          console.log(new Date(), "Destroy stream after timeout");
+          lineStream.end();
+          res.destroy();
+        }, 60_000);
+        resolve(lineStream);
       } else reject(new Error(`Failed to connect to stream: ${res.statusCode}`));
     }).end(),
   );
@@ -142,7 +144,7 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
 export async function getLastSavedTimepoint(outputDir: string, streamName: string) {
   console.log("Checking latest file in S3");
   // download latest file from S3
-  const files = await client.list({ prefix: streamName, maxKeys: 1000 });
+  const files = await s3Client.list({ prefix: streamName, maxKeys: 1000 });
   const len = files.keyCount ?? files.contents?.length ?? 0;
   // TODO: add pagination
   if (len > 999) throw new Error("Too many files in S3 bucket. Add pagination to list files");
@@ -157,7 +159,7 @@ export async function getLastSavedTimepoint(outputDir: string, streamName: strin
     console.log("Latest file already exists, using:", filename);
   } else {
     console.log("Downloading latest S3 file:", lastS3File);
-    const fileRef = client.file(lastS3File);
+    const fileRef = s3Client.file(lastS3File);
     await pipeline(fileRef.stream(), createGunzip(), createWriteStream(lastFileLocal));
   }
 
@@ -186,7 +188,7 @@ export async function cleanupOldFiles(outputDir: string, streamName: string) {
     const TWO_DAYS = 1000 * 60 * 60 * 24 * 2;
     if (fileAge > TWO_DAYS) {
       const objectPath = getS3ObjectPath(filePath, streamName);
-      const s3file = client.file(objectPath);
+      const s3file = s3Client.file(objectPath);
       const uploaded = await s3file.exists();
       if (uploaded) {
         console.log(new Date(), "Deleting old file", filePath);
@@ -204,7 +206,7 @@ export async function uploadExistingFilesToS3(outputDir: string, streamName: str
   for (const file of jsonFiles) {
     const filePath = `${outputDir}/${file}`;
     const objectPath = getS3ObjectPath(filePath, streamName);
-    const s3file = client.file(objectPath);
+    const s3file = s3Client.file(objectPath);
     const uploaded = await s3file.exists();
     if (!uploaded) {
       console.log(new Date(), "Uploading local file to S3", filePath);

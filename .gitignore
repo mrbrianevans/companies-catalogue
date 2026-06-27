@@ -6,3 +6,4 @@ tsconfig.tsbuildinfo
 terraform.tfvars
 .terraform
 __pycache__
+fix/backups
