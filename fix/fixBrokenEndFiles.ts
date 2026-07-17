@@ -28,13 +28,13 @@ function getEventTimepoint(event: Record<string, unknown> | undefined): number |
   return typeof timepoint === "number" ? timepoint : undefined;
 }
 
-function getNextFile(allFiles: string[], file: string): string | undefined {
+export function getNextFile(allFiles: string[], file: string): string | undefined {
   const index = allFiles.indexOf(file);
   if (index < 0 || index >= allFiles.length - 1) return undefined;
   return allFiles[index + 1];
 }
 
-async function withTempDir<T>(prefix: string, fn: (dir: string) => Promise<T>): Promise<T> {
+export async function withTempDir<T>(prefix: string, fn: (dir: string) => Promise<T>): Promise<T> {
   const tmpDir = await mkdtemp(join(tmpdir(), prefix));
   try {
     return await fn(tmpDir);
@@ -43,7 +43,7 @@ async function withTempDir<T>(prefix: string, fn: (dir: string) => Promise<T>): 
   }
 }
 
-async function validateTimepointContinuity(
+export async function validateTimepointContinuity(
   file: string,
   nextFile: string,
 ): Promise<{ lastTimepoint: number; nextTimepoint: number }> {
@@ -97,7 +97,7 @@ async function buildFixedFile(file: string, fixedLocalPath: string) {
   });
 }
 
-async function tryFixFile(
+export async function tryFixFile(
   connection: DuckDBConnection,
   file: string,
   backupDir: string,
@@ -162,16 +162,14 @@ async function main(fileUri: string) {
 
     const allFiles = await getAllBucketFiles(connection, streamPath);
     const nextFile = getNextFile(allFiles, fileUri);
-    if (!nextFile) {
-      throw new Error(
-        `Cannot fix ${fileUri}: no following file in bucket to verify timepoint continuity`,
+    if (nextFile) {
+      const { lastTimepoint, nextTimepoint } = await validateTimepointContinuity(fileUri, nextFile);
+      console.log(
+        `Timepoint continuity ok for ${fileUri}: ${lastTimepoint} -> ${nextTimepoint} (via ${nextFile})`,
       );
+    } else {
+      console.log("No following file to verify continuity");
     }
-
-    const { lastTimepoint, nextTimepoint } = await validateTimepointContinuity(fileUri, nextFile);
-    console.log(
-      `Timepoint continuity ok for ${fileUri}: ${lastTimepoint} -> ${nextTimepoint} (via ${nextFile})`,
-    );
 
     const fixed = await tryFixFile(connection, fileUri, backupDir);
     if (!fixed) {
@@ -184,4 +182,6 @@ async function main(fileUri: string) {
   }
 }
 
-await main(process.argv[2]);
+if (import.meta.main) {
+  await main(process.argv[2]);
+}

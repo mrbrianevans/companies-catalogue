@@ -129,6 +129,7 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
         // split2 to ensure only complete lines get streamed out
         const lineStream = res.pipe(split2((line) => line + "\n"));
         // kill after a few minutes
+        //TODO: this is often cutting out the write stream mid-line causing follow on errors.
         setTimeout(() => {
           console.log(new Date(), "Destroy stream after timeout");
           lineStream.end();
