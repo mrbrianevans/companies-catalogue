@@ -2,7 +2,7 @@ import { open, stat } from "fs/promises";
 import { basename } from "node:path";
 import { S3Client } from "bun";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { get, type RequestOptions } from "https";
+import { get, type RequestOptions } from "http";
 import { readdir } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
@@ -148,14 +148,30 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
   const responseStream = new Promise<AsyncIterable<Buffer>>((resolve, reject) =>
     get(options, (res) => {
       if (res.statusCode === 200) {
+        const connectedAt = Date.now();
         console.log(new Date(), "Connected to stream", streamPath);
         // splitLines to ensure only complete lines get streamed out
         const lineStream = res.pipe(splitLines());
         // kill after a few minutes
-        setTimeout(() => {
-          console.log(new Date(), "Destroy stream after timeout");
-          lineStream.end(() => res.destroy());
-        }, 60_000);
+        // default timeout of a few minutes, if no data is received.
+        let timeout = setTimeout(() => {
+          console.log(new Date(), "Initial timeout fired - no data received");
+          lineStream.end();
+          res.destroy(new Error("self-terminated connection after no data"));
+        }, 240_000);
+        res.on("data", () => {
+          const connectionDuration = Date.now() - connectedAt;
+          // absolute maximum of 5 minutes connection in the case of continuous data received
+          if (connectionDuration < 5 * 60 * 1000) {
+            // kill if no data for x seconds
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+              console.log(new Date(), "Timeout fired after some data received");
+              lineStream.end();
+              res.destroy(new Error("self-terminated connection after some time"));
+            }, 10_000);
+          }
+        });
         resolve(lineStream);
       } else reject(new Error(`Failed to connect to stream: ${res.statusCode}`));
     }).end(),
