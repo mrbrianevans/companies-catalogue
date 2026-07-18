@@ -144,7 +144,11 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
     "/" +
     streamPath +
     (typeof startFromTimepoint === "number" ? `?timepoint=${startFromTimepoint}` : "");
-  const options: RequestOptions = { hostname: process.env.STREAM_BASE_URL, path, auth };
+  const options: RequestOptions = {
+    hostname: process.env.STREAM_BASE_URL ?? "stream.companieshouse.gov.uk",
+    path,
+    auth,
+  };
   const responseStream = new Promise<AsyncIterable<Buffer>>((resolve, reject) =>
     get(options, (res) => {
       if (res.statusCode === 200) {

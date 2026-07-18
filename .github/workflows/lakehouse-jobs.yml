@@ -57,6 +57,7 @@ jobs:
         working-directory: eventCapture
         env:
           SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
+          STREAM_BASE_URL: "stream.companieshouse.gov.uk"
 
   load-lakehouse:
     needs: ["capture-streams", "capture-xbrl-csv"]
