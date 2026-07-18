@@ -1,8 +1,8 @@
-import { open, stat } from "fs/promises";
+import { open, stat } from "node:fs/promises";
 import { basename } from "node:path";
 import { S3Client } from "bun";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { get, type RequestOptions } from "http";
+import { get, type RequestOptions } from "node:https";
 import { readdir } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
