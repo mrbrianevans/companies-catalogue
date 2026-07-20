@@ -1,13 +1,13 @@
-import { open, stat } from "fs/promises";
+import { open, stat } from "node:fs/promises";
 import { basename } from "node:path";
 import { S3Client } from "bun";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { get, type RequestOptions } from "https";
+import { get, type RequestOptions } from "node:https";
 import { readdir } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
-import { Readable } from "node:stream";
-import split2 from "split2";
+import { Transform } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 
 export async function getLastJsonLine(filePath: string): Promise<Record<string, any> | undefined> {
   if (!existsSync(filePath)) return undefined;
@@ -66,7 +66,7 @@ export async function getLastJsonLine(filePath: string): Promise<Record<string, 
 export async function writeStreamToFile(stream: AsyncIterable<Buffer>, filename: string) {
   // duckdb ignores extra newlines caused by heart beats, so they don't need to be filtered out
   const outputStream = createWriteStream(filename);
-  await pipeline(Readable.from(stream), outputStream).catch((e) =>
+  await pipeline(stream, outputStream).catch((e) =>
     console.error("Error writing stream to file", filename, e.toString()),
   );
   const { bytesWritten } = outputStream;
@@ -115,26 +115,67 @@ export async function uploadToS3(file: string, streamName: string) {
   await localFile.delete();
 }
 
+// Custom impl instead of split2 because split2 emits the final bytes on flush even if not a complete line.
+// This only ever emits complete lines.
+function splitLines() {
+  let last = "";
+  const decoder = new StringDecoder("utf8");
+
+  return new Transform({
+    readableObjectMode: true,
+    transform(chunk, _enc, cb) {
+      last += decoder.write(chunk);
+      const list = last.split(/\r?\n/);
+      last = list.pop(); // keep incomplete tail
+      for (const line of list) if (line.trim()) this.push(line + "\n");
+      cb();
+    },
+    flush(cb) {
+      console.log("Bytes remaining in buffer at termination", last.length);
+      // deliberately do nothing with remaining `last`
+      cb();
+    },
+  });
+}
+
 export async function streamFromCh(streamPath: string, startFromTimepoint?: number) {
   const auth = process.env.STREAM_KEY + ":";
   const path =
     "/" +
     streamPath +
     (typeof startFromTimepoint === "number" ? `?timepoint=${startFromTimepoint}` : "");
-  const options: RequestOptions = { hostname: "stream.companieshouse.gov.uk", path, auth };
+  const options: RequestOptions = {
+    hostname: process.env.STREAM_BASE_URL ?? "stream.companieshouse.gov.uk",
+    path,
+    auth,
+  };
   const responseStream = new Promise<AsyncIterable<Buffer>>((resolve, reject) =>
     get(options, (res) => {
       if (res.statusCode === 200) {
+        const connectedAt = Date.now();
         console.log(new Date(), "Connected to stream", streamPath);
-        // split2 to ensure only complete lines get streamed out
-        const lineStream = res.pipe(split2((line) => line + "\n"));
+        // splitLines to ensure only complete lines get streamed out
+        const lineStream = res.pipe(splitLines());
         // kill after a few minutes
-        //TODO: this is often cutting out the write stream mid-line causing follow on errors.
-        setTimeout(() => {
-          console.log(new Date(), "Destroy stream after timeout");
+        // default timeout of a few minutes, if no data is received.
+        let timeout = setTimeout(() => {
+          console.log(new Date(), "Initial timeout fired - no data received");
           lineStream.end();
-          res.destroy();
-        }, 60_000);
+          res.destroy(new Error("self-terminated connection after no data"));
+        }, 240_000);
+        res.on("data", () => {
+          const connectionDuration = Date.now() - connectedAt;
+          // absolute maximum of 5 minutes connection in the case of continuous data received
+          if (connectionDuration < 5 * 60 * 1000) {
+            // kill if no data for x seconds
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+              console.log(new Date(), "Timeout fired after some data received");
+              lineStream.end();
+              res.destroy(new Error("self-terminated connection after some time"));
+            }, 10_000);
+          }
+        });
         resolve(lineStream);
       } else reject(new Error(`Failed to connect to stream: ${res.statusCode}`));
     }).end(),
