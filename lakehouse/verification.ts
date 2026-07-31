@@ -7,6 +7,8 @@ const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, 
 // only start testing from this point onwards since there was a data issue before hand
 const startingTimepoints: Record<string, number> = {
   officers: 36300854,
+  "insolvency-cases": 3205879,
+  filings: 213772890,
 };
 
 async function main(streamPath: string) {

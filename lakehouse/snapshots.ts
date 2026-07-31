@@ -60,7 +60,7 @@ async function main(streamPath: string) {
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY resource_uri
         ORDER BY event.timepoint DESC
-    ) = 1 and event.type != 'deleted' and ${deleteConditions[streamPath] ?? "true"};
+    ) = 1 and event.type is distinct from 'deleted' and ${deleteConditions[streamPath] ?? "true"};
     `);
   console.timeEnd("create local snapshot from lakehouse");
 
