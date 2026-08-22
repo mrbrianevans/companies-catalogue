@@ -161,7 +161,7 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
         let timeout = setTimeout(() => {
           console.log(new Date(), "Initial timeout fired - no data received");
           lineStream.end();
-          res.destroy(new Error("self-terminated connection after no data"));
+          res.destroy();
         }, 240_000);
         res.on("data", () => {
           const connectionDuration = Date.now() - connectedAt;
@@ -172,7 +172,7 @@ export async function streamFromCh(streamPath: string, startFromTimepoint?: numb
             timeout = setTimeout(() => {
               console.log(new Date(), "Timeout fired after some data received");
               lineStream.end();
-              res.destroy(new Error("self-terminated connection after some time"));
+              res.destroy();
             }, 10_000);
           }
         });
