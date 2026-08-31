@@ -33,7 +33,7 @@ async function fixEndBrokenFile(
   streamPath: string,
   file: string,
   allFiles: string[],
-): Promise<FixOutcome> {
+): Promise<Extract<FixOutcome, { status: "fixed" | "failed" }>> {
   const backupDir = join(import.meta.dir, "backups", streamPath);
 
   const nextFile = getNextFile(allFiles, file);

@@ -18,8 +18,34 @@ env:
 concurrency: lakehouse
 
 jobs:
+  capture-xbrl-csv:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [master, dev]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Use Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - run: bun index.ts
+        working-directory: xbrl
+        env:
+          SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
+
   xbrl-snapshot:
     name: XBRL snapshot
+    needs: ["capture-xbrl-csv"]
     runs-on: ubuntu-latest
 
     strategy:
@@ -41,6 +67,13 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - run: bun lakehouse.ts xbrl
+        working-directory: lakehouse
+        env:
+          SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
+          LAKE_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-lake' || 'dev-companies-stream-lake' }}
+          PGDATABASE: ${{ matrix.branch == 'master' && 'cc_prod' || 'cc_dev' }}
 
       - run: bun snapshots.ts xbrl
         working-directory: lakehouse
