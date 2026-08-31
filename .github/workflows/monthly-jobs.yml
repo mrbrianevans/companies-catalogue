@@ -32,6 +32,13 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
 
+      - name: Install ch-xbrl
+        run: |
+          curl -fsSL https://github.com/mrbrianevans/ch-xbrl/releases/download/v0.3.0/ch-xbrl_v0.3.0_linux_amd64.tar.gz \
+            | sudo tar -xzf - -C /usr/local/bin ch-xbrl
+          sudo chmod +x /usr/local/bin/ch-xbrl
+          ch-xbrl -V
+
       - name: Use Bun
         uses: oven-sh/setup-bun@v2
 
