@@ -8,7 +8,8 @@ import { setDefaultResultOrder } from "node:dns";
 setDefaultResultOrder("ipv4first");
 
 const PREFIX = "ch-xbrl/";
-const START_DATE = "2026-01-01";
+const START_DATE = "2010-01-01";
+const LIMIT = Math.max(1, Number.parseInt(process.env.XBRL_LIMIT ?? "12", 10) || 12);
 const PAGES = [
   "https://download.companieshouse.gov.uk/en_monthlyaccountsdata.html",
   "https://download.companieshouse.gov.uk/historicmonthlyaccountsdata.html",
@@ -161,14 +162,13 @@ const toLoad = [...byKey.values()]
   .filter((file) => !loaded.has(file.key))
   .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
 
-console.log('To Load:', toLoad)
+const batch = toLoad.slice(0, LIMIT);
+console.log("To Load:", toLoad.length, "pending after", START_DATE, "; ingesting", batch.length);
 
-const next = toLoad[0];
-if (!next) {
+if (batch.length === 0) {
   console.log("No new XBRL monthly files to ingest after", START_DATE);
 } else {
-  if (toLoad.length > 1) {
-    console.log(`${toLoad.length} pending files after ${START_DATE}; ingesting oldest`, next.key);
+  for (const file of batch) {
+    await ingest(file);
   }
-  await ingest(next);
 }
