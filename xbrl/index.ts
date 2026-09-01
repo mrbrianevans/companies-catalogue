@@ -170,5 +170,5 @@ if (!next) {
   if (toLoad.length > 1) {
     console.log(`${toLoad.length} pending files after ${START_DATE}; ingesting oldest`, next.key);
   }
-  await ingest({url: 'https://download.companieshouse.gov.uk/Accounts_Bulk_Data-2026-06-03.zip', key: PREFIX+'2026-06-03.csv.zst'});
+  await ingest(next);
 }
