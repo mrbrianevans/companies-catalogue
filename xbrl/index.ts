@@ -5,6 +5,11 @@ import { Readable } from "node:stream";
 import { createWriteStream } from "node:fs";
 
 const PREFIX = "ch-xbrl/";
+const START_DATE = "2026-01-01";
+const PAGES = [
+  "https://download.companieshouse.gov.uk/en_monthlyaccountsdata.html",
+  "https://download.companieshouse.gov.uk/historicmonthlyaccountsdata.html",
+] as const;
 const MONTH_NAMES = [
   "January",
   "February",
@@ -20,6 +25,14 @@ const MONTH_NAMES = [
   "December",
 ] as const;
 const FILE_RE = /(\d{4}-\d{2}-\d{2})--(\d{4}-\d{2}-\d{2})\.csv\.zst$/;
+const ZIP_NAME_RE = /Accounts_Monthly_Data-([A-Za-z]+)(?:To([A-Za-z]+))?(\d{4})\.zip$/i;
+
+type ExistingFile = {
+  url: string;
+  start: string;
+  end: string;
+  key: string;
+};
 
 function isoDate(d: Date) {
   const y = d.getFullYear();
@@ -28,60 +41,60 @@ function isoDate(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
-function lastFinishedMonth(now = new Date()) {
-  const start = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-  const end = new Date(now.getFullYear(), now.getMonth()-2, 0);
-  return { start, end };
+function monthIndex(name: string) {
+  const i = MONTH_NAMES.findIndex((m) => m.toLowerCase() === name.toLowerCase());
+  return i === -1 ? undefined : i;
 }
 
-function monthlyZipUrl(month: Date) {
-  return `https://download.companieshouse.gov.uk/Accounts_Monthly_Data-${MONTH_NAMES[month.getMonth()]}${month.getFullYear()}.zip`;
+function parseZipUrl(url: string): ExistingFile | null {
+  const filename = url.split("/").pop() ?? "";
+  const match = filename.match(ZIP_NAME_RE);
+  if (!match) return null;
+  const startMonth = monthIndex(match[1]);
+  const endMonth = match[2] ? monthIndex(match[2]) : startMonth;
+  const year = Number(match[3]);
+  if (startMonth === undefined || endMonth === undefined) return null;
+  const start = isoDate(new Date(year, startMonth, 1));
+  const end = isoDate(new Date(year, endMonth + 1, 0));
+  return { url, start, end, key: `${PREFIX}${start}--${end}.csv.zst` };
 }
 
-async function filesThatExist(){
-  const PAGE = "https://download.companieshouse.gov.uk/en_monthlyaccountsdata.html";
-  //TODO: also crawl https://download.companieshouse.gov.uk/historicmonthlyaccountsdata.html and union the links
+async function zipLinksFromPage(page: string) {
+  const res = await fetch(page);
+  if (!res.ok) throw new Error(`Failed to fetch ${page}: ${res.status} ${res.statusText}`);
 
-  const res = await fetch(PAGE);
   const links: string[] = [];
-
   await new HTMLRewriter()
     .on('a[href$=".zip"]', {
       element(el) {
         const href = el.getAttribute("href");
-        if (href) links.push(new URL(href, PAGE).href);
+        if (href) links.push(new URL(href, page).href);
       },
     })
     .transform(res)
     .blob(); // drain so handlers complete
 
-  return links
+  return links;
 }
 
-async function latestEndDateInBucket() {
+async function filesThatExist() {
+  const lists = await Promise.all(PAGES.map(zipLinksFromPage));
+  return [...new Set(lists.flat())];
+}
+
+async function loadedKeys() {
   const files = await s3Client.list({ prefix: PREFIX, maxKeys: 1000 });
   const len = files.keyCount ?? files.contents?.length ?? 0;
   if (len > 999) throw new Error("Too many files in S3 bucket. Add pagination to list files");
 
-  let latest: string | undefined;
+  const keys = new Set<string>();
   for (const { key } of files.contents ?? []) {
-    const match = key.match(FILE_RE);
-    if (!match) continue;
-    const end = match[2];
-    if (!latest || end > latest) latest = end;
+    if (key?.match(FILE_RE)) keys.add(key);
   }
-  return latest;
+  return keys;
 }
 
-const { start, end } = lastFinishedMonth();
-const monthEnd = isoDate(end);
-const latest = await latestEndDateInBucket();
-
-if (latest && latest >= monthEnd) {
-  console.log("Already have the latest finished month", monthEnd);
-} else {
-  const url = monthlyZipUrl(start);
-  const key = `${PREFIX}${isoDate(start)}--${monthEnd}.csv.zst`;
+async function ingest({ url, key }: ExistingFile) {
   console.log("Fetching", url, "->", key);
 
   console.time("Write CSV from XBRL ZIP URL");
@@ -105,4 +118,33 @@ if (latest && latest >= monthEnd) {
   await s3Client.file(key, { type: "application/zstd" }).write(Bun.file(tmp));
   await Bun.file(tmp).delete();
   console.timeEnd("Write CSV from XBRL ZIP URL");
+}
+
+const existingUrls = await filesThatExist();
+const byKey = new Map<string, ExistingFile>();
+for (const url of existingUrls) {
+  const parsed = parseZipUrl(url);
+  if (!parsed) {
+    console.warn("Skipping unrecognised zip URL", url);
+    continue;
+  }
+  if (parsed.start < START_DATE) continue;
+  if (!byKey.has(parsed.key)) byKey.set(parsed.key, parsed);
+}
+
+const loaded = await loadedKeys();
+const toLoad = [...byKey.values()]
+  .filter((file) => !loaded.has(file.key))
+  .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+
+console.log('To Load:', toLoad)
+
+const next = toLoad[0];
+if (!next) {
+  console.log("No new XBRL monthly files to ingest after", START_DATE);
+} else {
+  if (toLoad.length > 1) {
+    console.log(`${toLoad.length} pending files after ${START_DATE}; ingesting oldest`, next.key);
+  }
+  await ingest(next);
 }
