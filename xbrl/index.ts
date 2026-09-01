@@ -94,10 +94,10 @@ async function loadedKeys() {
   return keys;
 }
 
-async function ingest({ url, key }: ExistingFile) {
+async function ingest({ url, key }: Pick<ExistingFile, 'url'|'key'>) {
   console.log("Fetching", url, "->", key);
 
-  console.time("Write CSV from XBRL ZIP URL");
+  console.time("Parse and write local");
   const tmp = `${tmpdir()}/${crypto.randomUUID()}.csv.zst`;
 
   const proc = Bun.spawn(["ch-xbrl", url], {
@@ -114,10 +114,17 @@ async function ingest({ url, key }: ExistingFile) {
     await Bun.file(tmp).delete().catch(() => {});
     throw new Error(`ch-xbrl exited ${proc.exitCode}`);
   }
+  console.timeEnd("Parse and write local");
+  console.log("Local file", Bun.file(tmp).size, "bytes");
 
-  await s3Client.file(key, { type: "application/zstd" }).write(Bun.file(tmp));
+  console.time("S3 upload");
+  await s3Client.file(key, { type: "application/zstd" }).write(Bun.file(tmp), {
+    partSize: 16 * 1024 * 1024,
+    queueSize: 5,
+    retry: 3,
+  });
+  console.timeEnd("S3 upload");
   await Bun.file(tmp).delete();
-  console.timeEnd("Write CSV from XBRL ZIP URL");
 }
 
 const existingUrls = await filesThatExist();
