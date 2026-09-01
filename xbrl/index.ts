@@ -38,6 +38,26 @@ function monthlyZipUrl(month: Date) {
   return `https://download.companieshouse.gov.uk/Accounts_Monthly_Data-${MONTH_NAMES[month.getMonth()]}${month.getFullYear()}.zip`;
 }
 
+async function filesThatExist(){
+  const PAGE = "https://download.companieshouse.gov.uk/en_monthlyaccountsdata.html";
+  //TODO: also crawl https://download.companieshouse.gov.uk/historicmonthlyaccountsdata.html and union the links
+
+  const res = await fetch(PAGE);
+  const links: string[] = [];
+
+  await new HTMLRewriter()
+    .on('a[href$=".zip"]', {
+      element(el) {
+        const href = el.getAttribute("href");
+        if (href) links.push(new URL(href, PAGE).href);
+      },
+    })
+    .transform(res)
+    .blob(); // drain so handlers complete
+
+  return links
+}
+
 async function latestEndDateInBucket() {
   const files = await s3Client.list({ prefix: PREFIX, maxKeys: 1000 });
   const len = files.keyCount ?? files.contents?.length ?? 0;
