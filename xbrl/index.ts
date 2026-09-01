@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { createWriteStream } from "node:fs";
+import { setDefaultResultOrder } from "node:dns";
+
+setDefaultResultOrder("ipv4first");
 
 const PREFIX = "ch-xbrl/";
 const START_DATE = "2026-01-01";
@@ -117,12 +120,26 @@ async function ingest({ url, key }: Pick<ExistingFile, 'url'|'key'>) {
   console.timeEnd("Parse and write local");
   console.log("Local file", Bun.file(tmp).size, "bytes");
 
+  console.log("Bun", Bun.version, "uploading", Bun.file(tmp).size, "bytes");
   console.time("S3 upload");
-  await s3Client.file(key, { type: "application/zstd" }).write(Bun.file(tmp), {
+  const writer = s3Client.file(key, { type: "application/zstd" }).writer({
+    type: "application/zstd",
     partSize: 16 * 1024 * 1024,
     queueSize: 5,
     retry: 3,
   });
+  let uploaded = 0;
+  let lastLog = 0;
+  for await (const chunk of Bun.file(tmp).stream()) {
+    const pending = writer.write(chunk);
+    if (typeof pending !== "number") await pending;
+    uploaded += chunk.byteLength;
+    if (uploaded - lastLog >= 32 * 1024 * 1024) {
+      lastLog = uploaded;
+      console.log("Uploaded", uploaded, "bytes");
+    }
+  }
+  await writer.end();
   console.timeEnd("S3 upload");
   await Bun.file(tmp).delete();
 }
@@ -153,5 +170,5 @@ if (!next) {
   if (toLoad.length > 1) {
     console.log(`${toLoad.length} pending files after ${START_DATE}; ingesting oldest`, next.key);
   }
-  await ingest(next);
+  await ingest({url: 'https://download.companieshouse.gov.uk/Accounts_Bulk_Data-2026-06-03.zip', key: PREFIX+'2026-06-03.csv.zst'});
 }
