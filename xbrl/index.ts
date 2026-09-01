@@ -1,5 +1,8 @@
-import { $ } from "bun";
 import { s3Client } from "../eventCapture/utils.ts";
+import { tmpdir } from "node:os";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
+import { createWriteStream } from "node:fs";
 
 const PREFIX = "ch-xbrl/";
 const MONTH_NAMES = [
@@ -26,8 +29,8 @@ function isoDate(d: Date) {
 }
 
 function lastFinishedMonth(now = new Date()) {
-  const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const end = new Date(now.getFullYear(), now.getMonth(), 0);
+  const start = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+  const end = new Date(now.getFullYear(), now.getMonth()-2, 0);
   return { start, end };
 }
 
@@ -62,10 +65,24 @@ if (latest && latest >= monthEnd) {
   console.log("Fetching", url, "->", key);
 
   console.time("Write CSV from XBRL ZIP URL");
-  const outStream = $`ch-xbrl ${url}`;
-  const outFile = s3Client.file(key);
-  const rawOutput = await outStream.arrayBuffer();
-  const compressedOutput = await Bun.zstdCompress(rawOutput);
-  await outFile.write(compressedOutput);
+  const tmp = `${tmpdir()}/${crypto.randomUUID()}.csv.zst`;
+
+  const proc = Bun.spawn(["ch-xbrl", url], {
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+
+  await pipeline(
+    Readable.fromWeb(proc.stdout.pipeThrough(new CompressionStream("zstd"))),
+    createWriteStream(tmp),
+  );
+
+  if ((await proc.exited) !== 0) {
+    await Bun.file(tmp).delete().catch(() => {});
+    throw new Error(`ch-xbrl exited ${proc.exitCode}`);
+  }
+
+  await s3Client.file(key, { type: "application/zstd" }).write(Bun.file(tmp));
+  await Bun.file(tmp).delete();
   console.timeEnd("Write CSV from XBRL ZIP URL");
 }
