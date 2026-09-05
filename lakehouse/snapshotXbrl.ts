@@ -16,6 +16,9 @@ const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
 
 export async function snapshotXbrl(connection: DuckDBConnection, productionDatetime: string) {
+
+  console.log('Not yet implemented snapshotting of ch-xbrl. Will use PIVOT SQL')
+  return;
   //TODO: refactor to match the structure of the other snapshots (based on an array of file configs) and include samples/split files.
   console.time("create local snapshot from lakehouse");
   // there can be duplicate data if a daily and monthly file of the same period were ingested
