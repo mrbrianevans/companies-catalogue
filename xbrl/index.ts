@@ -8,7 +8,7 @@ import { setDefaultResultOrder } from "node:dns";
 setDefaultResultOrder("ipv4first");
 
 const PREFIX = "ch-xbrl/";
-const START_DATE = "2010-01-01";
+const START_DATE = "2011-01-01";
 const LIMIT = Math.max(1, Number.parseInt(process.env.XBRL_LIMIT ?? "12", 10) || 12);
 const PAGES = [
   "https://download.companieshouse.gov.uk/en_monthlyaccountsdata.html",
