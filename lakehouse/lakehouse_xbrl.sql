@@ -16,7 +16,7 @@ SELECT getvariable('files');
 INSERT INTO ch_xbrl BY NAME (
     SELECT *, date(filename[-29:-20]) as zip_start, cast(filename[-17:-8] as date) as zip_end, filename as csv_name
     FROM read_csv(
-        getvariable('files')
+        getvariable('files'), types = {'decimals':'VARCHAR'}
     )
 );
 
