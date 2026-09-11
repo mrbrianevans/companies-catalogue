@@ -16,36 +16,14 @@ const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
 
 export async function snapshotXbrl(connection: DuckDBConnection, productionDatetime: string) {
-
-  console.log('Not yet implemented snapshotting of ch-xbrl. Will use PIVOT SQL')
-  return;
   //TODO: refactor to match the structure of the other snapshots (based on an array of file configs) and include samples/split files.
   console.time("create local snapshot from lakehouse");
-  // there can be duplicate data if a daily and monthly file of the same period were ingested
-  /* Inspect overlapping files:
-    SELECT zip_url, zip_start, zip_end, COUNT(*)
-    FROM snapshot
-    WHERE zip_start BETWEEN '2026-04-01' AND '2026-04-05'
-    GROUP BY zip_url, zip_start, zip_end
-    ORDER BY zip_start;
-     */
+  // TODO: there can be duplicate data if a daily and monthly file of the same period were ingested
   await connection.run(`
-    CREATE  OR REPLACE TABLE local.xbrl.snapshot AS 
-    WITH non_daily AS (
-    SELECT DISTINCT zip_start, zip_end
-    FROM lakehouse.xbrl.xbrl
-    WHERE zip_url NOT LIKE '%Accounts_Bulk_Data-%'
-)
-    SELECT *
-    FROM lakehouse.xbrl.xbrl d
-    WHERE d.zip_url NOT LIKE '%Accounts_Bulk_Data-%'   -- keep all non-daily
-       OR NOT EXISTS (
-        SELECT 1
-        FROM non_daily m
-        WHERE d.zip_start >= m.zip_start
-          AND d.zip_start <= m.zip_end     -- daily date falls inside monthly range
-    );
-    `);
+    CREATE OR REPLACE TABLE local.xbrl.snapshot AS
+    SELECT company_number, period_start, period_end, concept, value, dimensions, zip_start, zip_end, csv_name, source_file 
+    FROM lakehouse.xbrl.ch_xbrl;
+  `);
   console.timeEnd("create local snapshot from lakehouse");
 
   // export from duckdb to local filesystem and then use bun's s3 client to upload to s3
@@ -69,7 +47,7 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   const outFileName = `${datedFileName}.csv.zst`;
   console.time("export csv.zst");
   const filesRes = await connection.runAndReadAll(`
-        COPY (SELECT * EXCLUDE (zip_start, zip_end, csv_name) FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
+        COPY (SELECT company_number, period_start, period_end, concept, value, dimensions, zip_start as batch_date, md5(csv_name[-30:] || source_file) as file_id FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
         TO '${outputDir}/${outFileName}'
         (FORMAT csv, COMPRESSION zstd, RETURN_FILES true);
         `);
@@ -96,7 +74,7 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   const parquetOutFileName = `${datedFileName}.parquet`;
   console.time("export parquet");
   const parquetFilesRes = await connection.runAndReadAll(`
-        COPY (SELECT * EXCLUDE (zip_start, zip_end, csv_name) FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
+        COPY (SELECT company_number, period_start, period_end, concept, value, dimensions, zip_start as batch_date, md5(csv_name[-30:] || source_file) as file_id FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
         TO '${outputDir}/${parquetOutFileName}'
         (FORMAT parquet, RETURN_FILES true);
         `);
@@ -119,10 +97,10 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   );
   outputFiles.push(...parquetOutputs);
 
-  const fullHistoryOutFileName = `xbrl_2008-01-01--${endDate.toISOString().split("T")[0]}.parquet`;
+  const fullHistoryOutFileName = `xbrl_2011-01-01--${endDate.toISOString().split("T")[0]}.parquet`;
   console.time("export full history");
   const fullHistoryFilesRes = await connection.runAndReadAll(`
-        COPY (SELECT * EXCLUDE (zip_start, zip_end, csv_name) FROM local.xbrl.snapshot where zip_start >= '2008-01-01' and zip_end <= '${endDate.toISOString()}') 
+        COPY (SELECT company_number, period_start, period_end, concept, value, dimensions, zip_start as batch_date, md5(csv_name[-30:] || source_file) as file_id FROM local.xbrl.snapshot where zip_start >= '2008-01-01' and zip_end <= '${endDate.toISOString()}') 
         TO '${outputDir}/${fullHistoryOutFileName}'
         (FORMAT parquet, RETURN_FILES true);
         `);

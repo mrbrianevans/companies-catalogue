@@ -22,7 +22,7 @@ async function main(streamPath: string) {
   await connection.run(`USE lakehouse.${getSchema(streamPath)};`);
   await connection.run(`SET VARIABLE SINK_BUCKET = '${process.env.SINK_BUCKET}';`);
   await connection.run(`SET VARIABLE streamPath = '${streamPath}';`);
-  if(streamPath === 'xbrl'){
+  if (streamPath === "xbrl") {
     // temporary during legacy to ch-xbrl migration transition period
     await connection.run(`SET VARIABLE streamPath = 'ch-xbrl';`);
   }
@@ -37,7 +37,10 @@ async function main(streamPath: string) {
 
   while (true) {
     console.time("check for unloaded files");
-    await executeSql(connection, `select 's3://'||getvariable('SINK_BUCKET')||'/'||getvariable('streamPath')||'/*${fileExtension}' as searchPath;`)
+    await executeSql(
+      connection,
+      `select 's3://'||getvariable('SINK_BUCKET')||'/'||getvariable('streamPath')||'/*${fileExtension}' as searchPath;`,
+    );
     const filesRemaining = await connection.runAndReadAll(`SELECT list(file) as files FROM
     (FROM glob('s3://'||getvariable('SINK_BUCKET')||'/'||getvariable('streamPath')||'/*${fileExtension}')
     WHERE file NOT IN (SELECT file FROM catalogue.cc_metadata.loaded_files))`);
