@@ -104,7 +104,7 @@ async function ingest({ url, key }: Pick<ExistingFile, 'url'|'key'>) {
   console.time("Parse and write local");
   const tmp = `${tmpdir()}/${crypto.randomUUID()}.csv.zst`;
 
-  const proc = Bun.spawn(["ch-xbrl", url], {
+  const proc = Bun.spawn(["ch-xbrl", "--continue-on-error", url], {
     stdout: "pipe",
     stderr: "inherit",
   });
