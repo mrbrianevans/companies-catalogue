@@ -1,6 +1,6 @@
 
 --- CH-XBRL
-CREATE OR REPLACE TABLE xbrl.accounts
+CREATE TABLE IF NOT EXISTS xbrl.accounts
 (
     archive             VARCHAR NOT NULL,
     zip_start           DATE,
