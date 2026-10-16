@@ -4,6 +4,7 @@ import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { createWriteStream } from "node:fs";
 import { setDefaultResultOrder } from "node:dns";
+import { saveAndCloseLakehouse, setupLakehouseConnection } from "../lakehouse/connection.ts";
 
 setDefaultResultOrder("ipv4first");
 
@@ -28,7 +29,7 @@ const MONTH_NAMES = [
   "November",
   "December",
 ] as const;
-const FILE_RE = /(\d{4}-\d{2}-\d{2})--(\d{4}-\d{2}-\d{2})\.csv\.zst$/;
+const FILE_RE = /(\d{4}-\d{2}-\d{2})--(\d{4}-\d{2}-\d{2})\.parquet$/;
 const ZIP_NAME_RE = /Accounts_Monthly_Data-([A-Za-z]+)(?:To([A-Za-z]+))?(\d{4})\.zip$/i;
 
 type ExistingFile = {
@@ -60,7 +61,7 @@ function parseZipUrl(url: string): ExistingFile | null {
   if (startMonth === undefined || endMonth === undefined) return null;
   const start = isoDate(new Date(year, startMonth, 1));
   const end = isoDate(new Date(year, endMonth + 1, 0));
-  return { url, start, end, key: `${PREFIX}${start}--${end}.csv.zst` };
+  return { url, start, end, key: `${PREFIX}${start}--${end}.parquet` };
 }
 
 async function zipLinksFromPage(page: string) {
@@ -102,7 +103,9 @@ async function ingest({ url, key }: Pick<ExistingFile, 'url'|'key'>) {
   console.log("Fetching", url, "->", key);
 
   console.time("Parse and write local");
-  const tmp = `${tmpdir()}/${crypto.randomUUID()}.csv.zst`;
+  const tmpId = crypto.randomUUID()
+  const tmp = `${tmpdir()}/${tmpId}.csv.zst`;
+  const tmpParquet = `${tmpdir()}/${tmpId}.parquet`;
 
   const proc = Bun.spawn(["ch-xbrl", "--continue-on-error", url], {
     stdout: "pipe",
@@ -121,28 +124,22 @@ async function ingest({ url, key }: Pick<ExistingFile, 'url'|'key'>) {
   console.timeEnd("Parse and write local");
   console.log("Local file", Bun.file(tmp).size, "bytes");
 
-  console.log("Bun", Bun.version, "uploading", Bun.file(tmp).size, "bytes");
+  //convert the output CSV to a Parquet file with zstd compression level 9 and large row group size (250k).
+
+  const { connection } = await setupLakehouseConnection();
+  await saveAndCloseLakehouse({ connection })
+  console.time("Converted csv.zst to parquet");
+  await connection.run(`COPY (from '${tmp}') TO '${tmpParquet}' (COMPRESSION zstd, ROW_GROUP_SIZE 250_000, COMPRESSION_LEVEL 9);`)
+  console.timeEnd("Converted csv.zst to parquet");
+
+  // Upload parquet to S3 to save parquet in the sink bucket:
+  let parquetFile = Bun.file(tmpParquet);
+  console.log("Bun", Bun.version, "uploading", parquetFile.size, "bytes");
   console.time("S3 upload");
-  const writer = s3Client.file(key, { type: "application/zstd" }).writer({
-    type: "application/zstd",
-    partSize: 16 * 1024 * 1024,
-    queueSize: 5,
-    retry: 3,
-  });
-  let uploaded = 0;
-  let lastLog = 0;
-  for await (const chunk of Bun.file(tmp).stream()) {
-    const pending = writer.write(chunk);
-    if (typeof pending !== "number") await pending;
-    uploaded += chunk.byteLength;
-    if (uploaded - lastLog >= 32 * 1024 * 1024) {
-      lastLog = uploaded;
-      console.log("Uploaded", uploaded, "bytes");
-    }
-  }
-  await writer.end();
+  await s3Client.file(key).write(parquetFile)
   console.timeEnd("S3 upload");
   await Bun.file(tmp).delete();
+  await Bun.file(tmpParquet).delete();
 }
 
 const existingUrls = await filesThatExist();
