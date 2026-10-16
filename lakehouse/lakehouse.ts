@@ -28,7 +28,7 @@ async function main(streamPath: string) {
   }
 
   const setupScript = streamPath === "xbrl" ? lakehouseSetupXbrlSql : lakehouseSetupSql;
-  const fileExtension = streamPath === "xbrl" ? ".csv.zst" : ".json.gz";
+  const fileExtension = streamPath === "xbrl" ? ".parquet" : ".json.gz";
   const lakehouseSql = streamPath === "xbrl" ? lakehouseXbrlSql : lakehouseEventsSql;
 
   console.time("setup lakehouse");
@@ -51,6 +51,7 @@ async function main(streamPath: string) {
     console.time("load events");
     await executeSql(connection, lakehouseSql);
     console.timeEnd("load events");
+    break
   }
 
   await saveAndCloseLakehouse({ connection });

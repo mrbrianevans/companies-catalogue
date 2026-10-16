@@ -122,14 +122,14 @@ async function ingest({ url, key }: Pick<ExistingFile, 'url'|'key'>) {
     throw new Error(`ch-xbrl exited ${proc.exitCode}`);
   }
   console.timeEnd("Parse and write local");
-  console.log("Local file", Bun.file(tmp).size, "bytes");
+  console.log("Local .csv.zst file", Bun.file(tmp).size, "bytes");
 
   //convert the output CSV to a Parquet file with zstd compression level 9 and large row group size (250k).
 
   const { connection } = await setupLakehouseConnection();
   await saveAndCloseLakehouse({ connection })
   console.time("Converted csv.zst to parquet");
-  await connection.run(`COPY (from '${tmp}') TO '${tmpParquet}' (COMPRESSION zstd, ROW_GROUP_SIZE 250_000, COMPRESSION_LEVEL 9);`)
+  await connection.run(`COPY (from read_csv('${tmp}', types = {'decimals':'VARCHAR'})) TO '${tmpParquet}' (COMPRESSION zstd, ROW_GROUP_SIZE 250_000, COMPRESSION_LEVEL 9);`)
   console.timeEnd("Converted csv.zst to parquet");
 
   // Upload parquet to S3 to save parquet in the sink bucket:
