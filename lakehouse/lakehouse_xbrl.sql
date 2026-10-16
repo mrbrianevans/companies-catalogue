@@ -20,23 +20,21 @@ CREATE OR REPLACE TEMPORARY TABLE facts AS
 -- this lakehouse step will be the PIVOT sql to convert the raw fact parquet files to one line per filing with columns for common concepts
 
 
-CREATE OR REPLACE TEMPORARY TABLE alias(col, ns_like, local_name, is_money) AS VALUES
---   ('employees',          'http://xbrl.frc.org.uk/fr/%/core',            'AverageNumberEmployeesDuringPeriod', false),
-  ('employees',          'http://www.xbrl.org/uk/%/core/2009-09-01',    'AverageNumberEmployeesDuringPeriod', false),
-  ('employees',          'http://xbrl.frc.org.uk/reports/%/direp',      'EmployeesTotal',                     false),
-  ('cash',               'http://xbrl.frc.org.uk/fr/%/core',            'CashBankOnHand',                     true),
-  ('cash',               'http://www.xbrl.org/uk/gaap/core/2009-09-01', 'CashBankInHand',                     true),
-  ('net_assets',         'http://xbrl.frc.org.uk/fr/%/core',            'NetAssetsLiabilities',               true),
---   ('net_assets',         'http://www.xbrl.org/uk/ifrs/core/2009-09-01', 'NetAssetsLiabilities',               true),
-  ('net_assets',         'http://www.xbrl.org/uk/gaap/core/2009-09-01', 'NetAssetsLiabilitiesIncludingPensionAssetLiability', true),
-  ('equity',             'http://xbrl.frc.org.uk/fr/%/core',            'Equity',                             true),
-  ('equity',             'http://www.xbrl.org/uk/gaap/core/2009-09-01', 'ShareholderFunds',                   true),
---   ('net_current_assets', 'http://xbrl.frc.org.uk/fr/%/core',            'NetCurrentAssetsLiabilities',        true),
-  ('net_current_assets', 'http://www.xbrl.org/uk/%/core/2009-09-01',    'NetCurrentAssetsLiabilities',        true);
+CREATE OR REPLACE TEMPORARY TABLE alias(col, local_name, is_money) AS VALUES
+  ('employees',           'AverageNumberEmployeesDuringPeriod', false),
+  ('employees',           'EmployeesTotal',                     false),
+  ('cash',                'CashBankOnHand',                     true),
+  ('cash',                'CashBankInHand',                     true),
+  ('net_assets',          'NetAssetsLiabilities',               true),
+  ('net_assets',          'NetAssetsLiabilitiesIncludingPensionAssetLiability', true),
+  ('equity',              'Equity',                             true),
+  ('equity',              'ShareholderFunds',                   true),
+  ('net_current_assets',  'NetCurrentAssetsLiabilities',        true);
 
 -- Report period per file, from dimensionless facts.
 CREATE OR REPLACE TEMPORARY TABLE report AS
 SELECT archive, source_file, any_value(company_number) AS company_number,
+       any_value(zip_start) AS zip_start, any_value(zip_end) AS zip_end,
        coalesce(max(value) FILTER (WHERE concept = 'EndDateForPeriodCoveredByReport'),
                 max(value) FILTER (WHERE concept = 'BalanceSheetDate'))::DATE AS period_end,
     max(value) FILTER (WHERE concept = 'StartDateForPeriodCoveredByReport')::DATE AS period_start
@@ -82,7 +80,7 @@ WHERE concept IN ('NameProductionSoftware', 'NameEntityAccountants', 'NameEntity
 GROUP BY archive, source_file;
 
 CREATE OR REPLACE TEMPORARY TABLE accounts_pivot AS
-SELECT r.archive, r.source_file, r.company_number, t.company_name, r.period_start, r.period_end, c.currency,
+SELECT r.archive, r.zip_start, r.zip_end, r.source_file, r.company_number, t.company_name, r.period_start, r.period_end, c.currency,
        p.employees, p.cash, p.net_assets, p.equity, p.net_current_assets,
        t.software, t.accountant_name, t.auditor_name, t.accounts_status,
        t.accounts_type, t.accounting_standard, t.dormant, t.trading_status, t.legal_form
