@@ -165,11 +165,16 @@ jobs:
           ref: ${{ matrix.branch }}
 
       - name: Install ch-xbrl
+        env:
+          CH_XBRL_VERSION: ${{ matrix.branch == 'master' && 'v0.4.6' || 'v0.4.6' }}
         run: |
+          base="https://github.com/mrbrianevans/ch-xbrl/releases/download/${CH_XBRL_VERSION}"
+          asset="ch-xbrl_${CH_XBRL_VERSION}_linux_amd64"
           tmp=$(mktemp -d)
-          curl -fsSL https://github.com/mrbrianevans/ch-xbrl/releases/download/v0.3.6/ch-xbrl_v0.3.6_linux_amd64.tar.gz \
-            | tar -xzf - -C "$tmp"
-          sudo install -m 0755 "$tmp/ch-xbrl" /usr/local/bin/ch-xbrl
+          curl -fsSL -o "$tmp/$asset" "$base/$asset"
+          curl -fsSL -o "$tmp/SHA256SUMS" "$base/SHA256SUMS"
+          (cd "$tmp" && grep " ${asset}\$" SHA256SUMS | sha256sum -c -)
+          sudo install -m 0755 "$tmp/$asset" /usr/local/bin/ch-xbrl
           ch-xbrl -V
 
       - name: Use Bun
