@@ -55,7 +55,7 @@ export async function saveAndCloseLakehouse({ connection }: { connection: DuckDB
   console.log("Detached lakehouse");
 }
 
-export async function setupS3OnlyConnection(){
+export async function setupS3OnlyConnection() {
   const db = await DuckDBInstance.create(":memory:");
   const connection = await db.connect();
   await connection.run("SET threads = 4;");
