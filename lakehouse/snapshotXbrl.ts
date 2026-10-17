@@ -20,7 +20,7 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   console.time("create local snapshot from lakehouse");
   // TODO: there can be duplicate data if a daily and monthly file of the same period were ingested
   await connection.run(`
-    CREATE OR REPLACE TABLE local.accounts.snapshot AS
+    CREATE OR REPLACE TABLE local.xbrl.snapshot AS
     SELECT * 
     FROM lakehouse.xbrl.accounts;
   `);
@@ -47,7 +47,7 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   const outFileName = `${datedFileName}.csv.zst`;
   console.time("export csv.zst");
   const filesRes = await connection.runAndReadAll(`
-        COPY (SELECT *, md5(archive[-30:] || source_file) as file_id FROM local.accounts.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
+        COPY (SELECT *, md5(archive[-30:] || source_file) as file_id FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
         TO '${outputDir}/${outFileName}'
         (FORMAT csv, COMPRESSION zstd, RETURN_FILES true);
         `);
@@ -74,7 +74,7 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   const parquetOutFileName = `${datedFileName}.parquet`;
   console.time("export parquet");
   const parquetFilesRes = await connection.runAndReadAll(`
-        COPY (SELECT *, md5(archive[-30:] || source_file) as file_id FROM local.accounts.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
+        COPY (SELECT *, md5(archive[-30:] || source_file) as file_id FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
         TO '${outputDir}/${parquetOutFileName}'
         (FORMAT parquet, RETURN_FILES true);
         `);
@@ -100,7 +100,7 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   const fullHistoryOutFileName = `xbrl_2011-01-01--${endDate.toISOString().split("T")[0]}.parquet`;
   console.time("export full history");
   const fullHistoryFilesRes = await connection.runAndReadAll(`
-        COPY (SELECT *, md5(archive[-30:] || source_file) as file_id FROM local.accounts.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
+        COPY (SELECT *, md5(archive[-30:] || source_file) as file_id FROM local.xbrl.snapshot where zip_start >= '2008-01-01' and zip_end <= '${endDate.toISOString()}') 
         TO '${outputDir}/${fullHistoryOutFileName}'
         (FORMAT parquet, RETURN_FILES true);
         `);
