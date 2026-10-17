@@ -4,7 +4,9 @@ import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { createWriteStream } from "node:fs";
 import { setDefaultResultOrder } from "node:dns";
-import { saveAndCloseLakehouse, setupLakehouseConnection } from "../lakehouse/connection.ts";
+import {
+  setupS3OnlyConnection,
+} from "../lakehouse/connection.ts";
 
 setDefaultResultOrder("ipv4first");
 
@@ -126,8 +128,7 @@ async function ingest({ url, key }: Pick<ExistingFile, 'url'|'key'>) {
 
   //convert the output CSV to a Parquet file with zstd compression level 9 and large row group size (250k).
 
-  const { connection } = await setupLakehouseConnection();
-  await saveAndCloseLakehouse({ connection })
+  const { connection } = await setupS3OnlyConnection();
   console.time("Converted csv.zst to parquet");
   await connection.run(`COPY (from read_csv('${tmp}', types = {'decimals':'VARCHAR'})) TO '${tmpParquet}' (COMPRESSION zstd, ROW_GROUP_SIZE 250_000, COMPRESSION_LEVEL 9);`)
   console.timeEnd("Converted csv.zst to parquet");
