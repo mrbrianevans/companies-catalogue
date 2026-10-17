@@ -4,9 +4,7 @@ import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { createWriteStream } from "node:fs";
 import { setDefaultResultOrder } from "node:dns";
-import {
-  setupS3OnlyConnection,
-} from "../lakehouse/connection.ts";
+import { DuckDBInstance } from "@duckdb/node-api";
 
 setDefaultResultOrder("ipv4first");
 
@@ -128,10 +126,13 @@ async function ingest({ url, key }: Pick<ExistingFile, 'url'|'key'>) {
 
   //convert the output CSV to a Parquet file with zstd compression level 9 and large row group size (250k).
 
-  const { connection } = await setupS3OnlyConnection();
+  const db = await DuckDBInstance.create(":memory:");
+  const connection = await db.connect()
   console.time("Converted csv.zst to parquet");
   await connection.run(`COPY (from read_csv('${tmp}', types = {'decimals':'VARCHAR'})) TO '${tmpParquet}' (COMPRESSION zstd, ROW_GROUP_SIZE 250_000, COMPRESSION_LEVEL 9);`)
   console.timeEnd("Converted csv.zst to parquet");
+  connection.closeSync()
+  db.closeSync()
 
   // Upload parquet to S3 to save parquet in the sink bucket:
   let parquetFile = Bun.file(tmpParquet);

@@ -51,7 +51,6 @@ async function main(streamPath: string) {
     console.time("load events");
     await executeSql(connection, lakehouseSql);
     console.timeEnd("load events");
-    break
   }
 
   await saveAndCloseLakehouse({ connection });
