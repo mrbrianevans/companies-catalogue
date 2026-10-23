@@ -54,3 +54,24 @@ export async function saveAndCloseLakehouse({ connection }: { connection: DuckDB
   await connection.run("DETACH lakehouse;");
   console.log("Detached lakehouse");
 }
+
+export async function setupS3OnlyConnection() {
+  const db = await DuckDBInstance.create(":memory:");
+  const connection = await db.connect();
+  await connection.run("SET threads = 4;");
+  await connection.run("SET memory_limit = '12GB';");
+  await connection.run(`
+INSTALL httpfs;
+LOAD httpfs;
+
+CREATE SECRET s3 (
+    TYPE s3,
+    KEY_ID '${process.env.S3_ACCESS_KEY_ID}',
+    SECRET '${process.env.S3_SECRET_ACCESS_KEY}',
+    REGION '${process.env.S3_REGION}',
+    ENDPOINT '${new URL(process.env.S3_ENDPOINT ?? "").host}'
+);
+`);
+
+  return { connection };
+}

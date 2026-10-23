@@ -1,0 +1,10 @@
+col,local_name,is_money
+employees,AverageNumberEmployeesDuringPeriod,false
+employees,EmployeesTotal,false
+cash,CashBankOnHand,true
+cash,CashBankInHand,true
+net_assets,NetAssetsLiabilities,true
+net_assets,NetAssetsLiabilitiesIncludingPensionAssetLiability,true
+equity,Equity,true
+equity,ShareholderFunds,true
+net_current_assets,NetCurrentAssetsLiabilities,true
