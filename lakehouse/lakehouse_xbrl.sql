@@ -13,8 +13,8 @@ SET VARIABLE files = (
 SELECT getvariable('files');
 
 CREATE OR REPLACE TEMPORARY TABLE facts AS
-       SELECT source_file, company_number, concept, value, dimensions, period_end, unit,
-           date(filename[-30:-21]) as zip_start, cast(filename[-18:-9] as date) as zip_end, filename as archive
+       SELECT source_file, source_file[14:21] as company_number, concept, value, dimensions, period_end, unit,
+           filename[-30:-21] as zip_start, filename[-18:-9] as zip_end, filename as archive
        FROM read_parquet(getvariable('files'));
 
 -- this lakehouse step will be the PIVOT sql to convert the raw fact parquet files to one line per filing with columns for common concepts
