@@ -20,16 +20,9 @@ CREATE OR REPLACE TEMPORARY TABLE facts AS
 -- this lakehouse step will be the PIVOT sql to convert the raw fact parquet files to one line per filing with columns for common concepts
 
 
-CREATE OR REPLACE TEMPORARY TABLE alias(col, local_name, is_money) AS VALUES
-  ('employees',           'AverageNumberEmployeesDuringPeriod', false),
-  ('employees',           'EmployeesTotal',                     false),
-  ('cash',                'CashBankOnHand',                     true),
-  ('cash',                'CashBankInHand',                     true),
-  ('net_assets',          'NetAssetsLiabilities',               true),
-  ('net_assets',          'NetAssetsLiabilitiesIncludingPensionAssetLiability', true),
-  ('equity',              'Equity',                             true),
-  ('equity',              'ShareholderFunds',                   true),
-  ('net_current_assets',  'NetCurrentAssetsLiabilities',        true);
+CREATE OR REPLACE TEMPORARY TABLE alias AS
+SELECT * FROM read_csv('lakehouse/xbrl_aliases.csv');
+
 
 -- Report period per file, from dimensionless facts.
 CREATE OR REPLACE TEMPORARY TABLE report AS
