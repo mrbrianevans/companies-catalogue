@@ -33,12 +33,13 @@ SELECT archive, source_file, any_value(company_number) AS company_number,
     max(value) FILTER (WHERE concept = 'StartDateForPeriodCoveredByReport')::DATE AS period_start
 FROM facts WHERE dimensions IS NULL GROUP BY archive, source_file;
 
--- Dimensionless, current-period numeric facts for the chosen columns.
+-- Current-period numeric facts for the chosen columns, matched on exact dimensions.
 CREATE OR REPLACE TEMPORARY TABLE cur AS
-SELECT f.archive, f.source_file, a.col, a.is_money, f.unit, try_cast(f.value AS DOUBLE) AS v
+SELECT f.archive, f.source_file, a.col, a.priority, a.is_money, f.unit, try_cast(f.value AS DOUBLE) AS v
 FROM facts f JOIN report r USING (archive, source_file)
              JOIN alias a ON f.concept = a.local_name
-WHERE f.dimensions IS NULL AND f.period_end::DATE = r.period_end
+                         AND f.dimensions IS NOT DISTINCT FROM a.dimensions
+WHERE f.period_end::DATE = r.period_end
   AND try_cast(f.value AS DOUBLE) IS NOT NULL;
 
 -- Reporting currency: most common currency among the money facts.
@@ -140,14 +141,22 @@ FROM a;
 
 CREATE OR REPLACE TEMPORARY TABLE accounts_pivot AS
 SELECT r.archive, r.zip_start, r.zip_end, r.source_file, r.company_number, t.company_name, r.period_start, r.period_end, c.currency,
-       p.employees, p.cash, p.net_assets, p.equity, p.net_current_assets,
+       p.employees, p.fixed_assets, p.intangible_assets, p.tangible_assets, p.fixed_asset_investments,
+       p.current_assets, p.stocks, p.debtors, p.cash, p.creditors_within_one_year, p.net_current_assets,
+       p.total_assets_less_current_liabilities, p.creditors_after_one_year, p.provisions, p.net_assets,
+       p.equity, p.share_capital, p.retained_earnings, p.turnover, p.gross_profit, p.operating_profit,
+       p.profit_before_tax, p.tax_on_profit, p.profit_loss, p.staff_costs,
        t.software, t.accountant_name, t.auditor_name, t.accounts_status,
        t.accounts_type, t.accounting_standard, t.dormant, t.trading_status, t.legal_form
 FROM report r
          LEFT JOIN (
-    PIVOT (SELECT archive, source_file, col, v FROM cur)
-        ON col IN ('employees', 'cash', 'net_assets', 'equity', 'net_current_assets')
-  USING max(v)
+    PIVOT (SELECT archive, source_file, col, priority, v FROM cur)
+        ON col IN ('employees', 'fixed_assets', 'intangible_assets', 'tangible_assets', 'fixed_asset_investments',
+               'current_assets', 'stocks', 'debtors', 'cash', 'creditors_within_one_year', 'net_current_assets',
+               'total_assets_less_current_liabilities', 'creditors_after_one_year', 'provisions', 'net_assets',
+               'equity', 'share_capital', 'retained_earnings', 'turnover', 'gross_profit', 'operating_profit',
+               'profit_before_tax', 'tax_on_profit', 'profit_loss', 'staff_costs')
+  USING arg_min(v, priority)
   GROUP BY archive, source_file
     ) p USING (archive, source_file)
          LEFT JOIN currency c USING (archive, source_file)

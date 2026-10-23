@@ -34,7 +34,7 @@ jobs:
 
       - name: Install ch-xbrl
         env:
-          CH_XBRL_VERSION: ${{ matrix.branch == 'master' && 'v0.4.6' || 'v0.4.6' }}
+          CH_XBRL_VERSION: ${{ matrix.branch == 'master' && 'v0.5.1' || 'v0.5.1' }}
         run: |
           base="https://github.com/mrbrianevans/ch-xbrl/releases/download/${CH_XBRL_VERSION}"
           asset="ch-xbrl_${CH_XBRL_VERSION}_linux_amd64"
