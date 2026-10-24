@@ -1,128 +1,119 @@
-// create local table of all accounts
-//TODO: refactor to match the structure of the other snapshots (based on an array of file configs) and include samples/split files. export parquet, csv.zst, json.gz and json.zst
-
-//TODO: update this to export only the last year (12 months).
-// Both exports should go to the private bucket.
-// source: SELECT * exclude (archive) FROM lakehouse.xbrl.accounts;
+// Export the last 12 complete months of XBRL accounts: full files to the private bucket, samples to the public bucket
 
 import { tmpdir } from "node:os";
 import { randomUUIDv7 } from "bun";
 import { mkdir } from "fs/promises";
-import { uploadLocalFiles } from "./utils.ts";
+import { type FileConfig, uploadLocalFiles } from "./utils.ts";
 import type { DuckDBConnection } from "@duckdb/node-api";
 
 const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
 
+const fileTypes: FileConfig[] = [
+  {
+    format: "parquet",
+    compression: "snappy",
+    extension: ".parquet",
+    description: "Parquet",
+    split: false,
+    sample: false,
+    single: true,
+    contentType: "application/vnd.apache.parquet",
+  },
+  {
+    format: "csv",
+    compression: "zstd",
+    extension: ".csv.zst",
+    description: "CSV (zstd)",
+    split: false,
+    sample: true,
+    single: true,
+    contentType: "application/zstd",
+  },
+  {
+    format: "json",
+    compression: "gzip",
+    extension: ".json.gz",
+    description: "JSON (gzip)",
+    split: false,
+    sample: false,
+    single: true,
+    contentType: "application/gzip",
+  },
+  {
+    format: "json",
+    compression: "zstd",
+    extension: ".json.zst",
+    description: "JSON (zstd)",
+    split: false,
+    sample: true,
+    single: true,
+    contentType: "application/zstd",
+  },
+];
+
 export async function snapshotXbrl(connection: DuckDBConnection, productionDatetime: string) {
+  // first day of the month a year ago until the last day of the previous month
+  const firstOfMonth = Temporal.Now.plainDateISO("UTC").with({ day: 1 });
+  const startDate = firstOfMonth.subtract({ years: 1 }).toString();
+  const endDate = firstOfMonth.subtract({ days: 1 }).toString();
+  const fileName = `xbrl_${startDate}--${endDate}`;
+  console.log("Exporting accounts from", startDate, "to", endDate);
+
   console.time("create local snapshot from lakehouse");
   await connection.run(`
     CREATE OR REPLACE TABLE local.xbrl.snapshot AS
     SELECT * exclude (archive)
-    FROM lakehouse.xbrl.accounts;
+    FROM lakehouse.xbrl.accounts
+    WHERE zip_start >= '${startDate}' AND zip_end <= '${endDate}';
   `);
   console.timeEnd("create local snapshot from lakehouse");
 
   // export from duckdb to local filesystem and then use bun's s3 client to upload to s3
   const outputDir = tmpdir() + "/companies-catalogue/" + randomUUIDv7() + "/xbrl";
   console.log("Exporting to local directory", outputDir);
-  await mkdir(outputDir, { recursive: true });
+  await mkdir(`${outputDir}/sample`, { recursive: true });
+
+  const exports = [
+    {
+      kind: "single",
+      source: "FROM local.xbrl.snapshot",
+      path: (f: FileConfig) => `${outputDir}/${fileName}${f.extension}`,
+      prefix: "monthly/",
+      bucket: privateSnapshotBucket,
+    },
+    {
+      kind: "sample",
+      source: "FROM local.xbrl.snapshot USING SAMPLE 100",
+      path: (f: FileConfig) => `${outputDir}/sample/xbrl${f.extension}`,
+      prefix: "sample/",
+      bucket: snapshotBucket,
+    },
+  ] as const;
+
   const outputFiles = [];
-
-  console.log("Exporting last two years");
-  // end date should be the last day of the previous month. start date should be 2 years prior on the first day of the month.
-  const startDate = new Date();
-  startDate.setFullYear(startDate.getFullYear() - 2);
-  startDate.setDate(1);
-  const endDate = new Date();
-  endDate.setDate(1);
-  endDate.setDate(endDate.getDate() - 1);
-  console.log("start date", startDate.toISOString());
-  console.log("end date", endDate.toISOString());
-  const datedFileName = `xbrl_${startDate.toISOString().split("T")[0]}--${endDate.toISOString().split("T")[0]}`;
-
-  const outFileName = `${datedFileName}.csv.zst`;
-  console.time("export csv.zst");
-  const filesRes = await connection.runAndReadAll(`
-        COPY (SELECT * exclude (archive) FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
-        TO '${outputDir}/${outFileName}'
-        (FORMAT csv, COMPRESSION zstd, RETURN_FILES true);
-        `);
-  console.timeEnd("export csv.zst");
-  console.log(filesRes.getRowObjects());
-  const outputs = await uploadLocalFiles(
-    filesRes,
-    {
-      compression: "zstd",
-      description: "Last two years (CSV Zstd)",
-      extension: ".csv.zst",
-      format: "csv",
-      sample: false,
-      single: true,
-      split: false,
-      contentType: "application/zstd",
-    },
-    "monthly/",
-    { lastTwoYears: true },
-    snapshotBucket,
-  );
-  outputFiles.push(...outputs);
-
-  const parquetOutFileName = `${datedFileName}.parquet`;
-  console.time("export parquet");
-  const parquetFilesRes = await connection.runAndReadAll(`
-        COPY (SELECT *, md5(archive[-30:] || source_file) as file_id FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
-        TO '${outputDir}/${parquetOutFileName}'
-        (FORMAT parquet, RETURN_FILES true);
-        `);
-  console.timeEnd("export parquet");
-  console.log(parquetFilesRes.getRowObjects());
-  const parquetOutputs = await uploadLocalFiles(
-    parquetFilesRes,
-    {
-      compression: "snappy",
-      description: "Last two years (Parquet)",
-      extension: ".parquet",
-      format: "parquet",
-      sample: false,
-      single: true,
-      split: false,
-    },
-    "monthly/",
-    { lastTwoYears: true },
-    snapshotBucket,
-  );
-  outputFiles.push(...parquetOutputs);
-
-  const fullHistoryOutFileName = `xbrl_2011-01-01--${endDate.toISOString().split("T")[0]}.parquet`;
-  console.time("export full history");
-  const fullHistoryFilesRes = await connection.runAndReadAll(`
-        COPY (SELECT *, md5(archive[-30:] || source_file) as file_id FROM local.xbrl.snapshot where zip_start >= '2008-01-01' and zip_end <= '${endDate.toISOString()}') 
-        TO '${outputDir}/${fullHistoryOutFileName}'
-        (FORMAT parquet, RETURN_FILES true);
-        `);
-  console.timeEnd("export full history");
-  console.log(fullHistoryFilesRes.getRowObjects());
-  const fullHistoryOutputs = await uploadLocalFiles(
-    fullHistoryFilesRes,
-    {
-      compression: "snappy",
-      description: "Full history (Parquet)",
-      extension: ".parquet",
-      format: "parquet",
-      sample: false,
-      single: true,
-      split: false,
-    },
-    "monthly/",
-    { fullHistory: true },
-    privateSnapshotBucket,
-  );
-  outputFiles.push(...fullHistoryOutputs);
+  for (const { kind, source, path, prefix, bucket } of exports) {
+    for (const file of fileTypes.filter((f) => f[kind])) {
+      const label = `export ${kind} ${file.extension}`;
+      console.time(label);
+      const filesRes = await connection.runAndReadAll(`
+        COPY (${source})
+        TO '${path(file)}'
+        (FORMAT ${file.format}, COMPRESSION ${file.compression}, RETURN_FILES true);
+      `);
+      console.timeEnd(label);
+      outputFiles.push(
+        ...(await uploadLocalFiles(filesRes, file, prefix, { [kind]: true }, bucket)),
+      );
+    }
+  }
+  console.log("Exported files", JSON.stringify(outputFiles));
 
   const manifest = {
     streamPath: "xbrl",
     snapshotPublishedAt: productionDatetime,
+    startDate,
+    endDate,
     downloads: outputFiles,
   };
   await Bun.s3.write(`xbrl-manifest.json`, JSON.stringify(manifest), {
