@@ -21,7 +21,7 @@ CREATE OR REPLACE TEMPORARY TABLE facts AS
 
 
 CREATE OR REPLACE TEMPORARY TABLE alias AS
-SELECT * FROM read_csv('lakehouse/xbrl_aliases.csv');
+SELECT * FROM read_csv('xbrl_aliases.csv');
 
 
 -- Report period per file, from dimensionless facts.
