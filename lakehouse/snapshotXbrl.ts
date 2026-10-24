@@ -1,10 +1,9 @@
 // create local table of all accounts
+//TODO: refactor to match the structure of the other snapshots (based on an array of file configs) and include samples/split files. export parquet, csv.zst, json.gz and json.zst
 
-// export csv.zst and parquet
-
-// last 2 years to public bucket
-
-// full history to private bucket
+//TODO: update this to export only the last year (12 months).
+// Both exports should go to the private bucket.
+// source: SELECT * exclude (archive) FROM lakehouse.xbrl.accounts;
 
 import { tmpdir } from "node:os";
 import { randomUUIDv7 } from "bun";
@@ -16,12 +15,10 @@ const snapshotBucket = process.env.SNAPSHOT_BUCKET;
 const privateSnapshotBucket = process.env.PRIVATE_SNAPSHOT_BUCKET;
 
 export async function snapshotXbrl(connection: DuckDBConnection, productionDatetime: string) {
-  //TODO: refactor to match the structure of the other snapshots (based on an array of file configs) and include samples/split files.
   console.time("create local snapshot from lakehouse");
-  // TODO: there can be duplicate data if a daily and monthly file of the same period were ingested
   await connection.run(`
     CREATE OR REPLACE TABLE local.xbrl.snapshot AS
-    SELECT * 
+    SELECT * exclude (archive)
     FROM lakehouse.xbrl.accounts;
   `);
   console.timeEnd("create local snapshot from lakehouse");
@@ -47,7 +44,7 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   const outFileName = `${datedFileName}.csv.zst`;
   console.time("export csv.zst");
   const filesRes = await connection.runAndReadAll(`
-        COPY (SELECT *, md5(archive[-30:] || source_file) as file_id FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
+        COPY (SELECT * exclude (archive) FROM local.xbrl.snapshot where zip_start >= '${startDate.toISOString()}' and zip_end <= '${endDate.toISOString()}') 
         TO '${outputDir}/${outFileName}'
         (FORMAT csv, COMPRESSION zstd, RETURN_FILES true);
         `);
