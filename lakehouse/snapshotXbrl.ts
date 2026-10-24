@@ -31,6 +31,16 @@ const fileTypes: FileConfig[] = [
     contentType: "application/zstd",
   },
   {
+    format: "csv",
+    compression: "none",
+    extension: ".csv",
+    description: "CSV",
+    split: false,
+    sample: true,
+    single: false,
+    contentType: "text/csv",
+  },
+  {
     format: "json",
     compression: "gzip",
     extension: ".json.gz",
