@@ -1,4 +1,4 @@
-// Export the last 12 complete months of XBRL accounts: full files to the private bucket, samples to the public bucket
+// Export XBRL accounts for the last 12 complete months and the full history since 2010: full files to the private bucket, samples to the public bucket
 
 import { tmpdir } from "node:os";
 import { randomUUIDv7 } from "bun";
@@ -53,19 +53,21 @@ const fileTypes: FileConfig[] = [
 ];
 
 export async function snapshotXbrl(connection: DuckDBConnection, productionDatetime: string) {
-  // first day of the month a year ago until the last day of the previous month
+  // periods end on the last day of the previous month
   const firstOfMonth = Temporal.Now.plainDateISO("UTC").with({ day: 1 });
-  const startDate = firstOfMonth.subtract({ years: 1 }).toString();
+  const fullHistoryStartDate = "2010-01-01";
   const endDate = firstOfMonth.subtract({ days: 1 }).toString();
-  const fileName = `xbrl_${startDate}--${endDate}`;
-  console.log("Exporting accounts from", startDate, "to", endDate);
+  const periods = [
+    { period: "lastYear", startDate: firstOfMonth.subtract({ years: 1 }).toString() },
+    { period: "fullHistory", startDate: fullHistoryStartDate },
+  ];
 
   console.time("create local snapshot from lakehouse");
   await connection.run(`
     CREATE OR REPLACE TABLE local.xbrl.snapshot AS
     SELECT * exclude (archive)
     FROM lakehouse.xbrl.accounts
-    WHERE zip_start >= '${startDate}' AND zip_end <= '${endDate}';
+    WHERE zip_start >= '${fullHistoryStartDate}' AND zip_end <= '${endDate}';
   `);
   console.timeEnd("create local snapshot from lakehouse");
 
@@ -77,34 +79,37 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   const exports = [
     {
       kind: "single",
-      source: "FROM local.xbrl.snapshot",
-      path: (f: FileConfig) => `${outputDir}/${fileName}${f.extension}`,
+      sample: "",
+      dir: outputDir,
       prefix: "monthly/",
       bucket: privateSnapshotBucket,
     },
     {
       kind: "sample",
-      source: "FROM local.xbrl.snapshot USING SAMPLE 100",
-      path: (f: FileConfig) => `${outputDir}/sample/xbrl${f.extension}`,
+      sample: "USING SAMPLE 100",
+      dir: `${outputDir}/sample`,
       prefix: "sample/",
       bucket: snapshotBucket,
     },
   ] as const;
 
   const outputFiles = [];
-  for (const { kind, source, path, prefix, bucket } of exports) {
-    for (const file of fileTypes.filter((f) => f[kind])) {
-      const label = `export ${kind} ${file.extension}`;
-      console.time(label);
-      const filesRes = await connection.runAndReadAll(`
-        COPY (${source})
-        TO '${path(file)}'
-        (FORMAT ${file.format}, COMPRESSION ${file.compression}, RETURN_FILES true);
-      `);
-      console.timeEnd(label);
-      outputFiles.push(
-        ...(await uploadLocalFiles(filesRes, file, prefix, { [kind]: true }, bucket)),
-      );
+  for (const { period, startDate } of periods) {
+    const fileName = `xbrl_${startDate}--${endDate}`;
+    for (const { kind, sample, dir, prefix, bucket } of exports) {
+      for (const file of fileTypes.filter((f) => f[kind])) {
+        const label = `export ${period} ${kind} ${file.extension}`;
+        console.time(label);
+        // sample in an outer query, as USING SAMPLE is applied before WHERE
+        const filesRes = await connection.runAndReadAll(`
+          COPY (FROM (FROM local.xbrl.snapshot WHERE zip_start >= '${startDate}') ${sample})
+          TO '${dir}/${fileName}${file.extension}'
+          (FORMAT ${file.format}, COMPRESSION ${file.compression}, RETURN_FILES true);
+        `);
+        console.timeEnd(label);
+        const metadata = { [kind]: true, period, startDate, endDate };
+        outputFiles.push(...(await uploadLocalFiles(filesRes, file, prefix, metadata, bucket)));
+      }
     }
   }
   console.log("Exported files", JSON.stringify(outputFiles));
@@ -112,8 +117,6 @@ export async function snapshotXbrl(connection: DuckDBConnection, productionDatet
   const manifest = {
     streamPath: "xbrl",
     snapshotPublishedAt: productionDatetime,
-    startDate,
-    endDate,
     downloads: outputFiles,
   };
   await Bun.s3.write(`xbrl-manifest.json`, JSON.stringify(manifest), {
