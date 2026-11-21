@@ -29,8 +29,8 @@ if (new Date(prodDate).getMonth() === new Date().getMonth()) {
   process.exit(0);
 }
 
-const personsRemoteFile = s3Client.file(`fixedwidth/companies_${prodDate}.parquet`);
-const companiesRemoteFile = s3Client.file(`fixedwidth/persons_${prodDate}.parquet`);
+const companiesRemoteFile = s3Client.file(`fixedwidth/companies_${prodDate}.parquet`);
+const personsRemoteFile = s3Client.file(`fixedwidth/persons_${prodDate}.parquet`);
 const alreadyExists = (await companiesRemoteFile.exists()) && (await personsRemoteFile.exists());
 if (alreadyExists) {
   console.log("This months files already exist on S3");
