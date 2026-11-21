@@ -58,6 +58,42 @@ jobs:
         env:
           SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
 
+  capture-fixedwidth:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', github.ref_name) || '["master","dev"]') }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Install ch-fixedwidth
+        env:
+          CH_FIXEDWIDTH_VERSION: ${{ matrix.branch == 'master' && 'v0.2.7' || 'v0.2.7' }}
+        run: |
+          asset="ch-fixedwidth-linux-x86_64"
+          tmp=$(mktemp -d)
+          curl -fsSL -o "$tmp/$asset" "https://github.com/mrbrianevans/ch-fixedwidth/releases/download/${CH_FIXEDWIDTH_VERSION}/$asset"
+          sudo install -m 0755 "$tmp/$asset" /usr/local/bin/ch-fixedwidth
+
+      - name: Use Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - run: bun ingestSink.ts
+        working-directory: fixedwidth
+        env:
+          SINK_BUCKET: ${{ matrix.branch == 'master' && 'companies-stream-sink' || 'dev-companies-stream-sink' }}
+
   xbrl-snapshot:
     name: XBRL snapshot
     needs: ["capture-xbrl-csv"]
