@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS fixedwidth.prod216_companies
     number_of_officers INTEGER,
     company_name       VARCHAR
 );
-ALTER TABLE fixedwidth.prod216_companies SET SORTED BY (company_number ASC);
 
 CREATE TABLE IF NOT EXISTS fixedwidth.prod216_persons
 (
@@ -37,4 +36,3 @@ CREATE TABLE IF NOT EXISTS fixedwidth.prod216_persons
     nationality           VARCHAR,
     resident_country      VARCHAR
 );
-ALTER TABLE fixedwidth.prod216_persons SET SORTED BY (company_number ASC);
