@@ -4,6 +4,7 @@ import { DuckDBInstance } from "@duckdb/node-api";
 import { tmpdir } from "node:os";
 import { s3Client } from "../eventCapture/utils.ts";
 import { rm } from "node:fs/promises";
+import { basename } from "node:path";
 
 const baseUrl = "https://s3.companiescatalogue.co.uk";
 
@@ -44,19 +45,32 @@ if (alreadyExists) {
 const tmpId = crypto.randomUUID();
 const tmp = `${tmpdir()}/ch-fixedwidth/${tmpId}`;
 const outdir = `${tmp}/raw`;
+const downloadDir = `${tmp}/download`;
 for (const { path } of prod216.latest_paths) {
   const url = new URL(path, baseUrl);
+  const localFile = `${downloadDir}/${basename(path)}`;
   console.log(url.toString());
+
+  // download to a local file first. Prefer zstd transfer encoding, fetch decompresses transparently.
+  console.time(`download ${url}`);
+  const res = await fetch(url, { headers: { "Accept-Encoding": "identity" } });
+  if (!res.ok) throw new Error(`Failed to download ${url}: ${res.status}`);
+  console.log("Content-Encoding", res.headers.get("content-encoding"));
+  const bytes = await Bun.write(localFile, res);
+  console.timeEnd(`download ${url}`);
+  console.log("Downloaded", bytes, "bytes to", localFile);
 
   console.time(`convert ${url}`);
   const bin = "ch-fixedwidth";
-  const proc = Bun.spawn([bin, "-o", outdir, url.toString()], {
+  const proc = Bun.spawn([bin, "-o", outdir, localFile], {
     stdout: "inherit",
     stderr: "inherit",
   });
   const code = await proc.exited;
   console.timeEnd(`convert ${url}`);
   console.log("Exit code for", url.toString(), code);
+  // delete the raw file now to avoid accumulating several GB on disk
+  await rm(localFile, { force: true });
   if (code !== 0) throw new Error(`ch-fixedwidth exited ${code}`);
 }
 
