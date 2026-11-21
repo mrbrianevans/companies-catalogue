@@ -8,10 +8,20 @@ import lakehouseSetupSql from "./lakehouse_setup.sql" with { type: "text" };
 import lakehouseXbrlSql from "./lakehouse_xbrl.sql" with { type: "text" };
 import lakehouseSetupXbrlSql from "./lakehouse_setup_xbrl.sql" with { type: "text" };
 import { DuckDBListValue } from "@duckdb/node-api";
+import { loadFixedwidth } from "./fixedwidth.js";
 
 const getSchema = (streamPath: string) => streamPath.replaceAll(/[^a-z0-9_]/gi, "_");
 
 async function main(streamPath: string) {
+  if (streamPath === "fixedwidth") {
+    console.log("Loading", streamPath, "into lakehouse");
+    const { connection } = await setupLakehouseConnection();
+    await connection.run(`CREATE SCHEMA IF NOT EXISTS lakehouse.fixedwidth;`);
+    await connection.run(`USE lakehouse.fixedwidth;`);
+    await loadFixedwidth(connection, `s3://${process.env.SINK_BUCKET}/fixedwidth`);
+    await saveAndCloseLakehouse({ connection });
+    return;
+  }
   if (!streams.includes(streamPath) && streamPath !== "xbrl") {
     console.log("stream", streamPath, "not in streams list, skipping");
     return;

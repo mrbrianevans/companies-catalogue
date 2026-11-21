@@ -82,6 +82,7 @@ jobs:
             "company-exemptions",
             "disqualified-officers",
             "xbrl",
+            "fixedwidth",
           ]
         branch: [master, dev]
 
