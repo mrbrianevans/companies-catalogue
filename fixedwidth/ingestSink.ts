@@ -42,7 +42,8 @@ if (alreadyExists) {
 }
 
 const tmpId = crypto.randomUUID();
-const outdir = `${tmpdir()}/ch-fixedwidth/${tmpId}/raw`;
+const tmp = `${tmpdir()}/ch-fixedwidth/${tmpId}`;
+const outdir = `${tmp}/raw`;
 for (const { path } of prod216.latest_paths) {
   const url = new URL(path, baseUrl);
   console.log(url.toString());
@@ -62,8 +63,8 @@ for (const { path } of prod216.latest_paths) {
 const db = await DuckDBInstance.create(":memory:");
 const connection = await db.connect();
 
-const tmpCompaniesParquet = `${tmpdir()}/ch-fixedwidth/${tmpId}/companies.parquet`;
-const tmpPersonsParquet = `${tmpdir()}/ch-fixedwidth/${tmpId}/persons.parquet`;
+const tmpCompaniesParquet = `${tmp}/companies.parquet`;
+const tmpPersonsParquet = `${tmp}/persons.parquet`;
 
 console.time("Write local companies parquet");
 await connection.run(
@@ -91,4 +92,4 @@ console.time("S3 upload");
 await personsRemoteFile.write(parquetFile);
 console.timeEnd("S3 upload");
 
-await rm(outdir, { recursive: true, force: true });
+await rm(tmp, { recursive: true, force: true });
