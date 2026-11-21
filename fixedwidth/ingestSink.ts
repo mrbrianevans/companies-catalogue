@@ -53,7 +53,7 @@ for (const { path } of prod216.latest_paths) {
 
   // download to a local file first. Prefer zstd transfer encoding, fetch decompresses transparently.
   console.time(`download ${url}`);
-  const res = await fetch(url, { headers: { "Accept-Encoding": "zstd, br, gzip" } });
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to download ${url}: ${res.status}`);
   console.log("Content-Encoding", res.headers.get("content-encoding"));
   const bytes = await Bun.write(localFile, res);
