@@ -1,9 +1,9 @@
 // ingest using ch-fixedwidth and companies-catalogue s3 bucket.
-// track loaded files in loadedFiles table
 
 import { DuckDBInstance } from "@duckdb/node-api";
 import { tmpdir } from "node:os";
 import { s3Client } from "../eventCapture/utils.ts";
+import { rm } from "node:fs/promises";
 
 const baseUrl = "https://s3.companiescatalogue.co.uk";
 
@@ -14,6 +14,10 @@ type LatestMetadata = {
 }[];
 
 const latestMetaRes = await fetch(new URL("/latest.json", baseUrl));
+if (!latestMetaRes.ok) {
+  console.log("LatestMetaRes not ok", latestMetaRes.status, await latestMetaRes.text());
+  throw new Error("Failed to fetch latest.json");
+}
 const latest = (await latestMetaRes.json()) as LatestMetadata;
 
 const prod216 = latest.find((p) => p.product_code === "prod216");
@@ -52,7 +56,7 @@ for (const { path } of prod216.latest_paths) {
   const code = await proc.exited;
   console.timeEnd(`convert ${url}`);
   console.log("Exit code for", url.toString(), code);
-  // if (code !== 0) throw new Error(`ch-fixedwidth exited ${code}`);
+  if (code !== 0) throw new Error(`ch-fixedwidth exited ${code}`);
 }
 
 const db = await DuckDBInstance.create(":memory:");
@@ -80,13 +84,11 @@ console.log("Bun", Bun.version, "uploading", parquetFile.size, "bytes");
 console.time("S3 upload");
 await companiesRemoteFile.write(parquetFile);
 console.timeEnd("S3 upload");
-await Bun.file(tmpCompaniesParquet).delete();
 
 parquetFile = Bun.file(tmpPersonsParquet);
 console.log("Bun", Bun.version, "uploading", parquetFile.size, "bytes");
 console.time("S3 upload");
 await personsRemoteFile.write(parquetFile);
 console.timeEnd("S3 upload");
-await Bun.file(tmpPersonsParquet).delete();
 
-await Bun.file(outdir).delete();
+await rm(outdir, { recursive: true, force: true });
